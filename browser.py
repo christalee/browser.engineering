@@ -47,6 +47,7 @@ class URL:
         _, url = url.split(":", 1)
       self.scheme, url = url.split("://", 1)
     assert self.scheme in ['http', 'https', 'file', 'data']
+
     self.get_host_path(url)
     if self.scheme == 'http':
       self.port = 80
@@ -56,6 +57,7 @@ class URL:
       self.port = 0
     elif self.scheme == "data":
       self.port = 0
+      # These are bad names for what is really the MIME type and content
       self.host, self.path = url.split(',', 1)
     if ":" in self.host:
       self.host, port = self.host.split(":", 1)
@@ -83,13 +85,7 @@ class URL:
 
     return s
 
-  def request(self):
-    if self.scheme == 'file':
-      with open(self.path, 'r', encoding="utf-8") as f:
-        return f.read()
-    if self.scheme == "data" and self.host == "text/html":
-      return self.path
-
+  def handle_http(self):
     if self.socket is None or self.socket.fileno() == -1:
       print("New socket opened!")
       self.socket = self.open_socket()
@@ -104,6 +100,7 @@ class URL:
     statusline = raw_response.readline().decode(encoding='utf-8')
     version, status, explanation = statusline.split(" ", 2)
     # print(version, status, explanation)
+
     response_headers = {}
     while True:
       line = raw_response.readline().decode(encoding='utf-8')
@@ -113,15 +110,26 @@ class URL:
       response_headers[header.casefold()] = value.strip()
     assert 'transfer-encoding' not in response_headers
     assert 'content-encoding' not in response_headers
+
     if 'content-length' in response_headers:
       content_length = int(response_headers['content-length'])
     else:
       content_length = -1
     content = raw_response.read(content_length).decode(encoding='utf-8')
     raw_response.close()
+
     sockets[(self.host, self.port)] = self.socket
 
     return content
+
+  def request(self):
+    if self.scheme == 'file':
+      with open(self.path, 'r', encoding="utf-8") as f:
+        return f.read()
+    if self.scheme == "data" and self.host == "text/html":
+      return self.path
+    if self.scheme == 'http' or 'https':
+      return self.handle_http()
 
 
 if __name__ == "__main__":
