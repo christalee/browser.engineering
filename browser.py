@@ -1,8 +1,10 @@
 import socket
 import ssl
 import re
+import json
 
 sockets = {}
+MAX_REDIRECTS = 3
 
 
 def show(body, entities):
@@ -18,7 +20,6 @@ def show(body, entities):
       if c == "&":
         m = re.search(r"&.*?;", body[i:])
         if m:
-          # print(m.start(), m.end(), m.group(0))
           entity = m.group(0)
           if entity in entities:
             print(entities[entity]['characters'], end="")
@@ -28,8 +29,10 @@ def show(body, entities):
     i += 1
 
 
-def load(url, entities):
-  body = url.request()
+def load(url, num_redirects):
+  with open('entities.json', 'r', encoding='utf-8') as f:
+    entities = json.load(f)
+  body = url.request(num_redirects)
   if url.view_source:
     print(body)
   else:
@@ -64,7 +67,6 @@ class URL:
       self.port = int(port)
 
     self.socket = sockets.get((self.host, self.port), None)
-    # print(self.scheme, self.host, self.port, self.path)
 
   def get_host_path(self, url):
     if '/' not in url:
@@ -85,10 +87,11 @@ class URL:
 
     return s
 
-  def handle_http(self):
+  def handle_http(self, num_redirects):
     if self.socket is None or self.socket.fileno() == -1:
       print("New socket opened!")
       self.socket = self.open_socket()
+    sockets[(self.host, self.port)] = self.socket
 
     r = f"GET {self.path} HTTP/1.1\r\n"
     request_headers = '\r\n'.join([f"Host: {self.host}", "User-Agent: christalee"])
@@ -99,7 +102,6 @@ class URL:
     raw_response = self.socket.makefile('rb', newline='\r\n')
     statusline = raw_response.readline().decode(encoding='utf-8')
     version, status, explanation = statusline.split(" ", 2)
-    # print(version, status, explanation)
 
     response_headers = {}
     while True:
@@ -111,6 +113,17 @@ class URL:
     assert 'transfer-encoding' not in response_headers
     assert 'content-encoding' not in response_headers
 
+    if status.startswith('3') and 'location' in response_headers:
+      url = response_headers['location']
+      if "://" not in url:
+        url = url.lstrip("/")
+        url = f"{self.scheme}://{self.host}/{url}"
+      if num_redirects < MAX_REDIRECTS:
+        print(f"Redirecting to: {url}")
+        load(URL(url), num_redirects=num_redirects + 1)
+      else:
+        print(f"Too many redirects, sorry")
+
     if 'content-length' in response_headers:
       content_length = int(response_headers['content-length'])
     else:
@@ -118,27 +131,24 @@ class URL:
     content = raw_response.read(content_length).decode(encoding='utf-8')
     raw_response.close()
 
-    sockets[(self.host, self.port)] = self.socket
-
     return content
 
-  def request(self):
+  def request(self, num_redirects):
     if self.scheme == 'file':
       with open(self.path, 'r', encoding="utf-8") as f:
         return f.read()
     if self.scheme == "data" and self.host == "text/html":
       return self.path
     if self.scheme == 'http' or 'https':
-      return self.handle_http()
+      return self.handle_http(num_redirects)
 
 
 if __name__ == "__main__":
-  import sys, json
+  import sys
 
-  with open('entities.json', 'r', encoding='utf-8') as f:
-    entities = json.load(f)
   if len(sys.argv) > 1:
     for url in sys.argv[1:]:
-      load(URL(url), entities)
+      load(URL(url), num_redirects=0)
   else:
-    load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'), entities)
+    load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'),
+         num_redirects=0)
