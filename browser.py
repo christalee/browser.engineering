@@ -2,6 +2,8 @@ import socket
 import ssl
 import re
 
+sockets = {}
+
 
 def show(body, entities):
   in_tag = False
@@ -19,8 +21,7 @@ def show(body, entities):
           # print(m.start(), m.end(), m.group(0))
           entity = m.group(0)
           if entity in entities:
-            chars = entities[entity]['characters']
-            print(chars, end="")
+            print(entities[entity]['characters'], end="")
           i += len(entity) - 1
       else:
         print(c, end="")
@@ -46,21 +47,21 @@ class URL:
         _, url = url.split(":", 1)
       self.scheme, url = url.split("://", 1)
     assert self.scheme in ['http', 'https', 'file', 'data']
+    self.get_host_path(url)
     if self.scheme == 'http':
       self.port = 80
-      self.get_host_path(url)
     elif self.scheme == 'https':
       self.port = 443
-      self.get_host_path(url)
     elif self.scheme == 'file':
       self.port = 0
-      self.get_host_path(url)
     elif self.scheme == "data":
       self.port = 0
       self.host, self.path = url.split(',', 1)
     if ":" in self.host:
       self.host, port = self.host.split(":", 1)
       self.port = int(port)
+
+    self.socket = sockets.get((self.host, self.port), None)
     # print(self.scheme, self.host, self.port, self.path)
 
   def get_host_path(self, url):
@@ -69,12 +70,7 @@ class URL:
     self.host, url = url.split('/', 1)
     self.path = '/' + url
 
-  def request(self):
-    if self.scheme == 'file':
-      with open(self.path, 'r', encoding="utf-8") as f:
-        return f.read()
-    if self.scheme == "data" and self.host == "text/html":
-      return self.path
+  def open_socket(self):
     s = socket.socket(
       family=socket.AF_INET,
       type=socket.SOCK_STREAM,
@@ -85,27 +81,45 @@ class URL:
       s = ctx.wrap_socket(s, server_hostname=self.host)
     s.connect((self.host, self.port))
 
+    return s
+
+  def request(self):
+    if self.scheme == 'file':
+      with open(self.path, 'r', encoding="utf-8") as f:
+        return f.read()
+    if self.scheme == "data" and self.host == "text/html":
+      return self.path
+
+    if self.socket is None or self.socket.fileno() == -1:
+      print("New socket opened!")
+      self.socket = self.open_socket()
+
     r = f"GET {self.path} HTTP/1.1\r\n"
-    request_headers = '\r\n'.join([f"Host: {self.host}", "Connection: close", "User-Agent: christalee"])
+    request_headers = '\r\n'.join([f"Host: {self.host}", "User-Agent: christalee"])
     r += request_headers
     r += '\r\n\r\n'
-    s.send(r.encode('utf-8'))
+    self.socket.send(r.encode('utf-8'))
 
-    response = s.makefile('r', encoding='utf-8', newline='\r\n')
-    statusline = response.readline()
+    raw_response = self.socket.makefile('rb', newline='\r\n')
+    statusline = raw_response.readline().decode(encoding='utf-8')
     version, status, explanation = statusline.split(" ", 2)
     # print(version, status, explanation)
     response_headers = {}
     while True:
-      line = response.readline()
+      line = raw_response.readline().decode(encoding='utf-8')
       if line == '\r\n':
         break
       header, value = line.split(":", 1)
       response_headers[header.casefold()] = value.strip()
     assert 'transfer-encoding' not in response_headers
     assert 'content-encoding' not in response_headers
-    content = response.read()
-    s.close()
+    if 'content-length' in response_headers:
+      content_length = int(response_headers['content-length'])
+    else:
+      content_length = -1
+    content = raw_response.read(content_length).decode(encoding='utf-8')
+    raw_response.close()
+    sockets[(self.host, self.port)] = self.socket
 
     return content
 
@@ -116,6 +130,7 @@ if __name__ == "__main__":
   with open('entities.json', 'r', encoding='utf-8') as f:
     entities = json.load(f)
   if len(sys.argv) > 1:
-    load(URL(sys.argv[1]), entities)
+    for url in sys.argv[1:]:
+      load(URL(url), entities)
   else:
     load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'), entities)
