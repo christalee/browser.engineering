@@ -2,8 +2,10 @@ import socket
 import ssl
 import re
 import json
+import datetime
 
 sockets = {}
+cache = {}
 MAX_REDIRECTS = 3
 
 
@@ -116,13 +118,26 @@ class URL:
     if status.startswith('3') and 'location' in response_headers:
       url = response_headers['location']
       if "://" not in url:
-        url = url.lstrip("/")
-        url = f"{self.scheme}://{self.host}/{url}"
+        url = f"{self.scheme}://{self.host}{url}"
       if num_redirects < MAX_REDIRECTS:
         print(f"Redirecting to: {url}")
         load(URL(url), num_redirects=num_redirects + 1)
       else:
         print(f"Too many redirects, sorry")
+
+    url = f"{self.scheme}://{self.host}{self.path}"
+    cache_control = ''
+    if 'cache-control' in response_headers and status == '200':
+      cache_control = response_headers['cache-control']
+      if 'max-age' in cache_control:
+        m = re.search(r'max-age=(\d*)', cache_control)
+        if m and url in cache:
+          max_age = int(m.group(1))
+          timestamp_content = cache[url]
+          content_age = datetime.datetime.now() - timestamp_content['timestamp']
+          if content_age.total_seconds() < max_age:
+            print(f"Returning content from cache: {url}")
+            return timestamp_content['content']
 
     if 'content-length' in response_headers:
       content_length = int(response_headers['content-length'])
@@ -130,6 +145,9 @@ class URL:
       content_length = -1
     content = raw_response.read(content_length).decode(encoding='utf-8')
     raw_response.close()
+
+    if 'no-store' not in cache_control:
+      cache[url] = {'timestamp': datetime.datetime.now(), 'content': content}
 
     return content
 
