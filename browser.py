@@ -35,10 +35,11 @@ def load(url, num_redirects):
   with open('entities.json', 'r', encoding='utf-8') as f:
     entities = json.load(f)
   body = url.request(num_redirects)
-  if url.view_source:
-    print(body)
-  else:
-    show(body, entities)
+  if body:
+    if url.view_source:
+      print(body)
+    else:
+      show(body, entities)
 
 
 class URL:
@@ -121,9 +122,10 @@ class URL:
         url = f"{self.scheme}://{self.host}{url}"
       if num_redirects < MAX_REDIRECTS:
         print(f"Redirecting to: {url}")
-        load(URL(url), num_redirects=num_redirects + 1)
+        return URL(url).request(num_redirects + 1)
       else:
         print(f"Too many redirects, sorry")
+        return None
 
     url = f"{self.scheme}://{self.host}{self.path}"
     cache_control = ''
