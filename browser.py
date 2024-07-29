@@ -3,13 +3,14 @@ import ssl
 import re
 import json
 import datetime
+from typing import Dict
 
 sockets = {}
 cache = {}
 MAX_REDIRECTS = 3
 
 
-def show(body, entities):
+def show(body: str, entities: Dict[str, Dict[str, str]]):
   in_tag = False
   i = 0
   while i < len(body):
@@ -31,7 +32,7 @@ def show(body, entities):
     i += 1
 
 
-def load(url, num_redirects):
+def load(url: "URL", num_redirects: int = 0):
   with open('entities.json', 'r', encoding='utf-8') as f:
     entities = json.load(f)
   body = url.request(num_redirects)
@@ -43,7 +44,7 @@ def load(url, num_redirects):
 
 
 class URL:
-  def __init__(self, url):
+  def __init__(self, url: str):
     self.view_source = False
     if url.startswith('data:'):
       self.scheme, url = url.split(':', 1)
@@ -61,6 +62,8 @@ class URL:
       self.port = 443
     elif self.scheme == 'file':
       self.port = 0
+      if not self.host:
+        self.host = 'localhost'
     elif self.scheme == "data":
       self.port = 0
       # These are bad names for what is really the MIME type and content
@@ -71,7 +74,7 @@ class URL:
 
     self.socket = sockets.get((self.host, self.port), None)
 
-  def get_host_path(self, url):
+  def get_host_path(self, url: str):
     if '/' not in url:
       url = url + '/'
     self.host, url = url.split('/', 1)
@@ -83,14 +86,14 @@ class URL:
       type=socket.SOCK_STREAM,
       proto=socket.IPPROTO_TCP
     )
+    s.connect((self.host, self.port))
     if self.scheme == 'https':
       ctx = ssl.create_default_context()
       s = ctx.wrap_socket(s, server_hostname=self.host)
-    s.connect((self.host, self.port))
 
     return s
 
-  def handle_http(self, num_redirects):
+  def handle_http(self, num_redirects: int = 0):
     if self.socket is None or self.socket.fileno() == -1:
       print("New socket opened!")
       self.socket = self.open_socket()
@@ -153,7 +156,7 @@ class URL:
 
     return content
 
-  def request(self, num_redirects):
+  def request(self, num_redirects: int = 0):
     if self.scheme == 'file':
       with open(self.path, 'r', encoding="utf-8") as f:
         return f.read()
@@ -168,7 +171,6 @@ if __name__ == "__main__":
 
   if len(sys.argv) > 1:
     for url in sys.argv[1:]:
-      load(URL(url), num_redirects=0)
+      load(URL(url))
   else:
-    load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'),
-         num_redirects=0)
+    load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'))
