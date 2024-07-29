@@ -4,6 +4,7 @@ from unittest.mock import patch
 import io
 import re
 import time
+import gzip
 
 from browser import URL, show, load
 from test_utils import socket, ssl
@@ -300,7 +301,7 @@ class TestBrowserLoad(unittest.TestCase):
     self.assertNotIn(f"Redirecting to: {url5}", mock_stdout.getvalue())
     self.assertIn("Too many redirects, sorry", mock_stdout.getvalue())
 
-  def test_cache_no_header(self, mock_stdout):
+  def test_load_cache_no_header(self, mock_stdout):
     url = "http://browser.engineering/examples/example1-simple.html"
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Body text</pre>"
@@ -313,7 +314,7 @@ class TestBrowserLoad(unittest.TestCase):
     self.assertEqual(len(body_text), 2)
     self.assertNotIn('Returning content from cache:', mock_stdout.getvalue())
 
-  def test_cache_expired(self, mock_stdout):
+  def test_load_cache_expired(self, mock_stdout):
     url = "http://browser.engineering/examples/example1-simple.html"
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Cache-Control: max-age=0\r\n\r\n" + b"<pre>Body text</pre>"
@@ -326,7 +327,7 @@ class TestBrowserLoad(unittest.TestCase):
     self.assertEqual(len(body_text), 2)
     self.assertNotIn('Returning content from cache:', mock_stdout.getvalue())
 
-  def test_cache_header_present_ok(self, mock_stdout):
+  def test_load_cache_header_present_ok(self, mock_stdout):
     url = "http://browser.engineering/examples/example1-simple.html"
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Cache-Control: max-age=10\r\n\r\n" + b"<pre>Body text</pre>"
@@ -339,7 +340,7 @@ class TestBrowserLoad(unittest.TestCase):
     self.assertEqual(len(body_text), 2)
     self.assertIn('Returning content from cache:', mock_stdout.getvalue())
 
-  def test_cache_header_present_not_ok(self, mock_stdout):
+  def test_load_cache_header_present_not_ok(self, mock_stdout):
     url = "http://browser.engineering/examples/example1-simple.html"
     socket.respond(
       url, b"HTTP/1.0 404 Not Found\r\n" + b"Cache-Control: max-age=10\r\n\r\n" + b"<pre>Body text</pre>"
@@ -352,7 +353,7 @@ class TestBrowserLoad(unittest.TestCase):
     self.assertEqual(len(body_text), 2)
     self.assertNotIn('Returning content from cache:', mock_stdout.getvalue())
 
-  def test_cache_header_present_no_store(self, mock_stdout):
+  def test_load_cache_header_present_no_store(self, mock_stdout):
     url = "http://browser.engineering/examples/cache_header_present_no_store.html"
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Cache-Control: no-store, max-age=10\r\n\r\n" + b"<pre>Body text</pre>"
@@ -365,7 +366,7 @@ class TestBrowserLoad(unittest.TestCase):
     self.assertEqual(len(body_text), 2)
     self.assertNotIn('Returning content from cache:', mock_stdout.getvalue())
 
-  def test_content_length_present(self, mock_stdout):
+  def test_load_content_length_present(self, mock_stdout):
     url = "http://browser.engineering/examples/example1-simple.html"
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Content-Length: 5\r\n\r\n" + b"Body text"
@@ -374,3 +375,24 @@ class TestBrowserLoad(unittest.TestCase):
 
     self.assertIn('Body ', mock_stdout.getvalue())
     self.assertNotIn('text', mock_stdout.getvalue())
+
+  def test_load_compression_non_chunked(self, mock_stdout):
+    url = "http://browser.engineering/examples/example1-simple.html"
+    body = gzip.compress(b"Body text")
+    socket.respond(
+      url, b"HTTP/1.0 200 OK\r\n" + b"Content-Encoding: gzip\r\n\r\n" + body
+    )
+    load(URL(url))
+
+    self.assertIn("Body text", mock_stdout.getvalue())
+
+  def test_load_compression_chunked(self, mock_stdout):
+    url = "http://browser.engineering/examples/example1-simple.html"
+    body_text = "5\r\nBody \r\n4\r\ntext\r\n0\r\n\r\n"
+    body = gzip.compress(bytes(body_text, encoding='utf-8'))
+    socket.respond(
+      url, b"HTTP/1.0 200 OK\r\n" + b"Content-Encoding: gzip\r\n" + b"Transfer-Encoding: chunked\r\n\r\n" + body
+    )
+    load(URL(url))
+
+    self.assertIn("Body text", mock_stdout.getvalue())

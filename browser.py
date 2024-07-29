@@ -3,7 +3,9 @@ import ssl
 import re
 import json
 import datetime
+import gzip
 from typing import Dict
+import sys
 
 sockets = {}
 cache = {}
@@ -100,7 +102,7 @@ class URL:
     sockets[(self.host, self.port)] = self.socket
 
     r = f"GET {self.path} HTTP/1.1\r\n"
-    request_headers = '\r\n'.join([f"Host: {self.host}", "User-Agent: christalee"])
+    request_headers = '\r\n'.join([f"Host: {self.host}", "Accept-Encoding: gzip", "User-Agent: christalee"])
     r += request_headers
     r += '\r\n\r\n'
     self.socket.send(r.encode('utf-8'))
@@ -116,8 +118,6 @@ class URL:
         break
       header, value = line.split(":", 1)
       response_headers[header.casefold()] = value.strip()
-    assert 'transfer-encoding' not in response_headers
-    assert 'content-encoding' not in response_headers
 
     if status.startswith('3') and 'location' in response_headers:
       url = response_headers['location']
@@ -148,8 +148,29 @@ class URL:
       content_length = int(response_headers['content-length'])
     else:
       content_length = -1
-    content = raw_response.read(content_length).decode(encoding='utf-8')
+
+    content = raw_response.read(content_length)
     raw_response.close()
+
+    if 'content-encoding' in response_headers and response_headers['content-encoding'] == 'gzip':
+      content = gzip.decompress(content)
+
+    # TODO find a wild URL that responds with Transfer-Encoding=chunked and test this
+    # (currently unclear whether it's gzip decompress first and then read chunks or vice versa)
+    if 'transfer-encoding' in response_headers and response_headers['transfer-encoding'] == 'chunked':
+      lines = content.split(b'\r\n')
+      i = 0
+      content = b''
+      while i < len(lines):
+        length = int(lines[i], 16)
+        if length == 0:
+          break
+        line = lines[i + 1]
+        assert len(line) == length
+        content += line
+        i += 2
+
+    content = content.decode(encoding='utf-8')
 
     if 'no-store' not in cache_control:
       cache[url] = {'timestamp': datetime.datetime.now(), 'content': content}
