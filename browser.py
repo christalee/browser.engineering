@@ -1,190 +1,59 @@
-import socket
-import ssl
-import re
 import json
-import datetime
-import gzip
+import re
+import tkinter
 from typing import Dict
-import sys
 
-sockets = {}
-cache = {}
-MAX_REDIRECTS = 3
+from url import URL
 
-
-def show(body: str, entities: Dict[str, Dict[str, str]]):
-  in_tag = False
-  i = 0
-  while i < len(body):
-    c = body[i]
-    if c == "<":
-      in_tag = True
-    elif c == ">":
-      in_tag = False
-    elif not in_tag:
-      if c == "&":
-        m = re.search(r"&.*?;", body[i:])
-        if m:
-          entity = m.group(0)
-          if entity in entities:
-            print(entities[entity]['characters'], end="")
-          i += len(entity) - 1
-      else:
-        print(c, end="")
-    i += 1
+WIDTH, HEIGHT = 800, 600
 
 
-def load(url: "URL", num_redirects: int = 0):
-  with open('entities.json', 'r', encoding='utf-8') as f:
-    entities = json.load(f)
-  body = url.request(num_redirects)
-  if body:
-    if url.view_source:
-      print(body)
-    else:
-      show(body, entities)
-
-
-class URL:
-  def __init__(self, url: str):
-    self.view_source = False
-    if url.startswith('data:'):
-      self.scheme, url = url.split(':', 1)
-    else:
-      if url.startswith('view-source:'):
-        self.view_source = True
-        _, url = url.split(":", 1)
-      self.scheme, url = url.split("://", 1)
-    assert self.scheme in ['http', 'https', 'file', 'data']
-
-    self.get_host_path(url)
-    if self.scheme == 'http':
-      self.port = 80
-    elif self.scheme == 'https':
-      self.port = 443
-    elif self.scheme == 'file':
-      self.port = 0
-      if not self.host:
-        self.host = 'localhost'
-    elif self.scheme == "data":
-      self.port = 0
-      # These are bad names for what is really the MIME type and content
-      self.host, self.path = url.split(',', 1)
-    if ":" in self.host:
-      self.host, port = self.host.split(":", 1)
-      self.port = int(port)
-
-    self.socket = sockets.get((self.host, self.port), None)
-
-  def get_host_path(self, url: str):
-    if '/' not in url:
-      url = url + '/'
-    self.host, url = url.split('/', 1)
-    self.path = '/' + url
-
-  def open_socket(self):
-    s = socket.socket(
-      family=socket.AF_INET,
-      type=socket.SOCK_STREAM,
-      proto=socket.IPPROTO_TCP
+class Browser:
+  def __init__(self):
+    self.window = tkinter.Tk()
+    self.canvas = tkinter.Canvas(
+      self.window,
+      width=WIDTH,
+      height=HEIGHT
     )
-    s.connect((self.host, self.port))
-    if self.scheme == 'https':
-      ctx = ssl.create_default_context()
-      s = ctx.wrap_socket(s, server_hostname=self.host)
+    self.canvas.pack()
 
-    return s
-
-  def handle_http(self, num_redirects: int = 0):
-    if self.socket is None or self.socket.fileno() == -1:
-      print("New socket opened!")
-      self.socket = self.open_socket()
-    sockets[(self.host, self.port)] = self.socket
-
-    r = f"GET {self.path} HTTP/1.1\r\n"
-    request_headers = '\r\n'.join([f"Host: {self.host}", "Accept-Encoding: gzip", "User-Agent: christalee"])
-    r += request_headers
-    r += '\r\n\r\n'
-    self.socket.send(r.encode('utf-8'))
-
-    raw_response = self.socket.makefile('rb', newline='\r\n')
-    statusline = raw_response.readline().decode(encoding='utf-8')
-    version, status, explanation = statusline.split(" ", 2)
-
-    response_headers = {}
-    while True:
-      line = raw_response.readline().decode(encoding='utf-8')
-      if line == '\r\n':
-        break
-      header, value = line.split(":", 1)
-      response_headers[header.casefold()] = value.strip()
-
-    if status.startswith('3') and 'location' in response_headers:
-      url = response_headers['location']
-      if "://" not in url:
-        url = f"{self.scheme}://{self.host}{url}"
-      if num_redirects < MAX_REDIRECTS:
-        print(f"Redirecting to: {url}")
-        return URL(url).request(num_redirects + 1)
+  def load(self, url: URL, num_redirects: int = 0):
+    with open('entities.json', 'r', encoding='utf-8') as f:
+      entities = json.load(f)
+    body = url.request(num_redirects)
+    if body:
+      if url.view_source:
+        print(body)
       else:
-        print(f"Too many redirects, sorry")
-        return None
+        text = self.lex(body, entities)
+        print(text)
+    for c in text:
+      self.canvas.create_text(100, 100, text=c)
 
-    url = f"{self.scheme}://{self.host}{self.path}"
-    cache_control = ''
-    if 'cache-control' in response_headers and status == '200':
-      cache_control = response_headers['cache-control']
-      if 'max-age' in cache_control:
-        m = re.search(r'max-age=(\d*)', cache_control)
-        if m and url in cache:
-          max_age = int(m.group(1))
-          timestamp_content = cache[url]
-          content_age = datetime.datetime.now() - timestamp_content['timestamp']
-          if content_age.total_seconds() < max_age:
-            print(f"Returning content from cache: {url}")
-            return timestamp_content['content']
+  def lex(self, body: str, entities: Dict[str, Dict[str, str]]):
+    text = ''
+    in_tag = False
+    i = 0
+    while i < len(body):
+      c = body[i]
+      if c == "<":
+        in_tag = True
+      elif c == ">":
+        in_tag = False
+      elif not in_tag:
+        if c == "&":
+          m = re.search(r"&.*?;", body[i:])
+          if m:
+            entity = m.group(0)
+            if entity in entities:
+              text += entities[entity]['characters']
+            i += len(entity) - 1
+        else:
+          text += c
+      i += 1
 
-    if 'content-length' in response_headers:
-      content_length = int(response_headers['content-length'])
-    else:
-      content_length = -1
-
-    content = raw_response.read(content_length)
-    raw_response.close()
-
-    if 'content-encoding' in response_headers and response_headers['content-encoding'] == 'gzip':
-      content = gzip.decompress(content)
-
-    # TODO find a wild URL that responds with Transfer-Encoding=chunked and test this
-    # (currently unclear whether it's gzip decompress first and then read chunks or vice versa)
-    if 'transfer-encoding' in response_headers and response_headers['transfer-encoding'] == 'chunked':
-      lines = content.split(b'\r\n')
-      i = 0
-      content = b''
-      while i < len(lines):
-        length = int(lines[i], 16)
-        if length == 0:
-          break
-        line = lines[i + 1]
-        assert len(line) == length
-        content += line
-        i += 2
-
-    content = content.decode(encoding='utf-8')
-
-    if 'no-store' not in cache_control:
-      cache[url] = {'timestamp': datetime.datetime.now(), 'content': content}
-
-    return content
-
-  def request(self, num_redirects: int = 0):
-    if self.scheme == 'file':
-      with open(self.path, 'r', encoding="utf-8") as f:
-        return f.read()
-    if self.scheme == "data" and self.host == "text/html":
-      return self.path
-    if self.scheme == 'http' or 'https':
-      return self.handle_http(num_redirects)
+    return text
 
 
 if __name__ == "__main__":
@@ -192,6 +61,7 @@ if __name__ == "__main__":
 
   if len(sys.argv) > 1:
     for url in sys.argv[1:]:
-      load(URL(url))
+      Browser().load(URL(url))
   else:
-    load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'))
+    Browser().load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'))
+  tkinter.mainloop()

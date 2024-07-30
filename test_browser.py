@@ -6,7 +6,8 @@ import re
 import time
 import gzip
 
-from browser import URL, show, load
+from browser import Browser
+from url import URL
 from test_utils import socket, ssl
 
 
@@ -20,137 +21,33 @@ class TestBrowserShow(unittest.TestCase):
 
   def test_show_no_tags(self, mock_stdout):
     body = 'Hello, world!'
-    show(body, self.entities)
+    Browser().lex(body, self.entities)
 
     self.assertEqual(mock_stdout.getvalue(), body)
 
   def test_show_tags(self, mock_stdout):
     body = '<pre>Hello, world!</pre>'
-    show(body, self.entities)
+    Browser().lex(body, self.entities)
 
     self.assertEqual(mock_stdout.getvalue(), 'Hello, world!')
 
   def test_show_entities(self, mock_stdout):
     body = '&lt;div&gt;'
-    show(body, self.entities)
+    Browser().lex(body, self.entities)
 
     self.assertEqual(mock_stdout.getvalue(), '<div>')
 
   def test_show_invalid_entities(self, mock_stdout):
     body = '&asdf;'
-    show(body, self.entities)
+    Browser().lex(body, self.entities)
 
     self.assertEqual(mock_stdout.getvalue(), '')
 
   def test_show_unicode(self, mock_stdout):
     body = '🍐🪄'
-    show(body, self.entities)
+    Browser().lex(body, self.entities)
 
     self.assertEqual(mock_stdout.getvalue(), body)
-
-
-class TestBrowserURL(unittest.TestCase):
-  # Tests for URL parsing
-  def test_url_http_parse(self):
-    result = URL('http://www.example.com/index.html')
-
-    self.assertEqual(result.view_source, False)
-    self.assertEqual(result.scheme, 'http')
-    self.assertEqual(result.host, 'www.example.com')
-    self.assertEqual(result.port, 80)
-    self.assertEqual(result.path, '/index.html')
-
-  def test_url_https_parse(self):
-    result = URL('https://www.example.com/index.html')
-
-    self.assertEqual(result.view_source, False)
-    self.assertEqual(result.scheme, 'https')
-    self.assertEqual(result.host, 'www.example.com')
-    self.assertEqual(result.port, 443)
-    self.assertEqual(result.path, '/index.html')
-
-  def test_url_port_parse(self):
-    result = URL('http://www.example.com:8080/index.html')
-
-    self.assertEqual(result.view_source, False)
-    self.assertEqual(result.scheme, 'http')
-    self.assertEqual(result.host, 'www.example.com')
-    self.assertEqual(result.port, 8080)
-    self.assertEqual(result.path, '/index.html')
-
-  def test_url_file_parse_host(self):
-    result = URL('file://localhost/path/to/file.txt')
-
-    self.assertEqual(result.view_source, False)
-    self.assertEqual(result.scheme, 'file')
-    self.assertEqual(result.host, 'localhost')
-    self.assertEqual(result.port, 0)
-    self.assertEqual(result.path, '/path/to/file.txt')
-
-  def test_url_file_parse_no_host(self):
-    result = URL('file:///path/to/file.txt')
-
-    self.assertEqual(result.view_source, False)
-    self.assertEqual(result.scheme, 'file')
-    self.assertEqual(result.host, 'localhost')
-    self.assertEqual(result.port, 0)
-    self.assertEqual(result.path, '/path/to/file.txt')
-
-  def test_url_data_parse(self):
-    result = URL('data:text/html,Hello, world!')
-
-    self.assertEqual(result.view_source, False)
-    self.assertEqual(result.scheme, 'data')
-    self.assertEqual(result.host, 'text/html')
-    self.assertEqual(result.port, 0)
-    self.assertEqual(result.path, 'Hello, world!')
-
-  def test_url_view_source(self):
-    result = URL('view-source:https://www.example.com/index.html')
-
-    self.assertEqual(result.view_source, True)
-    self.assertEqual(result.scheme, 'https')
-    self.assertEqual(result.host, 'www.example.com')
-    self.assertEqual(result.port, 443)
-    self.assertEqual(result.path, '/index.html')
-
-
-class TestBrowserRequest(unittest.TestCase):
-  def setUp(self):
-    socket.patch().start()
-
-  def tearDown(self):
-    socket.patch().stop()
-
-  def test_request_file(self):
-    content = URL(
-      'file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt').request()
-
-    self.assertEqual(content, 'This is an example file full of text.')
-
-  def test_request_data(self):
-    content = URL('data:text/html,Hello, world!').request()
-
-    self.assertEqual(content, 'Hello, world!')
-
-  def test_request_http(self):
-    url = "http://browser.engineering/examples/example1-simple.html"
-    socket.respond(
-      url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"Body text"
-    )
-    content = URL(url).request()
-
-    self.assertEqual(content, 'Body text')
-
-  def test_request_https(self):
-    ssl.patch().start()
-    url = "https://browser.engineering/examples/example1-simple.html"
-    socket.respond(
-      url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"Body text"
-    )
-    content = URL(url).request()
-
-    self.assertEqual(content, 'Body text')
 
 
 @patch('sys.stdout', new_callable=io.StringIO)
@@ -173,7 +70,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"&lt;Body text&gt;"
     )
-    load(URL(url))
+    Browser().load(URL(url))
 
     self.assertIn('New socket opened!', mock_stdout.getvalue())
     self.assertIn('<Body text>', mock_stdout.getvalue())
@@ -184,7 +81,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"&lt;Body text&gt;"
     )
-    load(URL(url))
+    Browser().load(URL(url))
 
     self.assertIn('New socket opened!', mock_stdout.getvalue())
     self.assertIn('<Body text>', mock_stdout.getvalue())
@@ -194,7 +91,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"&lt;Body text&gt;"
     )
-    load(URL(url))
+    Browser().load(URL(url))
 
     self.assertIn('<Body text>', mock_stdout.getvalue())
 
@@ -203,7 +100,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url))
+    Browser().load(URL(url))
 
     self.assertIn("<pre>Body text</pre>", mock_stdout.getvalue())
 
@@ -216,8 +113,8 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url2, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Example text 2</pre>"
     )
-    load(URL(url1))
-    load(URL(url2))
+    Browser().load(URL(url1))
+    Browser().load(URL(url2))
 
     new_sockets = re.findall(r'New socket opened!', mock_stdout.getvalue())
     self.assertEqual(len(new_sockets), 2)
@@ -231,8 +128,8 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url2, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Example text 2</pre>"
     )
-    load(URL(url1))
-    load(URL(url2))
+    Browser().load(URL(url1))
+    Browser().load(URL(url2))
 
     new_sockets = re.findall(r'New socket opened!', mock_stdout.getvalue())
     self.assertEqual(len(new_sockets), 1)
@@ -247,7 +144,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url2, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url1))
+    Browser().load(URL(url1))
 
     self.assertIn(f"Redirecting to: {url2}", mock_stdout.getvalue())
     self.assertIn("Body text", mock_stdout.getvalue())
@@ -263,7 +160,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url2, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url1))
+    Browser().load(URL(url1))
 
     self.assertIn(f"Redirecting to: {url2}", mock_stdout.getvalue())
     self.assertIn("Body text", mock_stdout.getvalue())
@@ -293,7 +190,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url5, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url1))
+    Browser().load(URL(url1))
 
     self.assertIn(f"Redirecting to: {url2}", mock_stdout.getvalue())
     self.assertIn(f"Redirecting to: {url3}", mock_stdout.getvalue())
@@ -306,9 +203,9 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Header1: Value1\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url))
+    Browser().load(URL(url))
     time.sleep(1)
-    load(URL(url))
+    Browser().load(URL(url))
 
     body_text = re.findall(r'Body text', mock_stdout.getvalue())
     self.assertEqual(len(body_text), 2)
@@ -319,9 +216,9 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Cache-Control: max-age=0\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url))
+    Browser().load(URL(url))
     time.sleep(1)
-    load(URL(url))
+    Browser().load(URL(url))
 
     body_text = re.findall(r'Body text', mock_stdout.getvalue())
     self.assertEqual(len(body_text), 2)
@@ -332,9 +229,9 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Cache-Control: max-age=10\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url))
+    Browser().load(URL(url))
     time.sleep(1)
-    load(URL(url))
+    Browser().load(URL(url))
 
     body_text = re.findall(r'Body text', mock_stdout.getvalue())
     self.assertEqual(len(body_text), 2)
@@ -345,9 +242,9 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 404 Not Found\r\n" + b"Cache-Control: max-age=10\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url))
+    Browser().load(URL(url))
     time.sleep(1)
-    load(URL(url))
+    Browser().load(URL(url))
 
     body_text = re.findall(r'Body text', mock_stdout.getvalue())
     self.assertEqual(len(body_text), 2)
@@ -358,9 +255,9 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Cache-Control: no-store, max-age=10\r\n\r\n" + b"<pre>Body text</pre>"
     )
-    load(URL(url))
+    Browser().load(URL(url))
     time.sleep(1)
-    load(URL(url))
+    Browser().load(URL(url))
 
     body_text = re.findall(r'Body text', mock_stdout.getvalue())
     self.assertEqual(len(body_text), 2)
@@ -371,7 +268,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Content-Length: 5\r\n\r\n" + b"Body text"
     )
-    load(URL(url))
+    Browser().load(URL(url))
 
     self.assertIn('Body ', mock_stdout.getvalue())
     self.assertNotIn('text', mock_stdout.getvalue())
@@ -382,7 +279,7 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Content-Encoding: gzip\r\n\r\n" + body
     )
-    load(URL(url))
+    Browser().load(URL(url))
 
     self.assertIn("Body text", mock_stdout.getvalue())
 
@@ -393,6 +290,6 @@ class TestBrowserLoad(unittest.TestCase):
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Content-Encoding: gzip\r\n" + b"Transfer-Encoding: chunked\r\n\r\n" + body
     )
-    load(URL(url))
+    Browser().load(URL(url))
 
     self.assertIn("Body text", mock_stdout.getvalue())
