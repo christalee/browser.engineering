@@ -113,29 +113,25 @@ class URL:
     else:
       content_length = -1
 
-    print(content_length)
-    content = raw_response.read(content_length).decode(encoding='utf-8')
-    raw_response.close()
+    if 'transfer-encoding' in response_headers and response_headers['transfer-encoding'] == 'chunked':
+      content = b''
+      while True:
+        length = int(raw_response.readline().strip(), 16)
+        if length == 0:
+          raw_response.readline()
+          break
+        line = raw_response.read(length)
+        # need to read past \r\n
+        raw_response.read(2)
+        content += line
+    else:
+      content = raw_response.read(content_length)
 
     if 'content-encoding' in response_headers and response_headers['content-encoding'] == 'gzip':
       content = gzip.decompress(content)
 
-    # TODO find a wild URL that responds with Transfer-Encoding=chunked and test this
-    # (currently unclear whether it's gzip decompress first and then read chunks or vice versa)
-    if 'transfer-encoding' in response_headers and response_headers['transfer-encoding'] == 'chunked':
-      lines = content.split(b'\r\n')
-      i = 0
-      content = b''
-      while i < len(lines):
-        length = int(lines[i], 16)
-        if length == 0:
-          break
-        line = lines[i + 1]
-        assert len(line) == length
-        content += line
-        i += 2
-
     content = content.decode(encoding='utf-8')
+    raw_response.close()
 
     if 'no-store' not in cache_control:
       cache[url] = {'timestamp': datetime.datetime.now(), 'content': content}
