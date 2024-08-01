@@ -11,43 +11,42 @@ from url import URL
 from test_utils import socket, ssl
 
 
-@patch('sys.stdout', new_callable=io.StringIO)
-class TestBrowserShow(unittest.TestCase):
-  # Tests for show()
+class TestBrowserLex(unittest.TestCase):
+  # Tests for lex()
   def setUp(self):
     self.entities = {}
     with open('entities.json', 'r', encoding='utf-8') as f:
       self.entities = json.load(f)
 
-  def test_show_no_tags(self, mock_stdout):
+  def test_show_no_tags(self):
     body = 'Hello, world!'
-    Browser().lex(body, self.entities)
+    text = Browser().lex(body, self.entities)
 
-    self.assertEqual(mock_stdout.getvalue(), body)
+    self.assertEqual(text, body)
 
-  def test_show_tags(self, mock_stdout):
+  def test_show_tags(self):
     body = '<pre>Hello, world!</pre>'
-    Browser().lex(body, self.entities)
+    text = Browser().lex(body, self.entities)
 
-    self.assertEqual(mock_stdout.getvalue(), 'Hello, world!')
+    self.assertEqual(text, 'Hello, world!')
 
-  def test_show_entities(self, mock_stdout):
+  def test_show_entities(self):
     body = '&lt;div&gt;'
-    Browser().lex(body, self.entities)
+    text = Browser().lex(body, self.entities)
 
-    self.assertEqual(mock_stdout.getvalue(), '<div>')
+    self.assertEqual(text, '<div>')
 
-  def test_show_invalid_entities(self, mock_stdout):
+  def test_show_invalid_entities(self):
     body = '&asdf;'
-    Browser().lex(body, self.entities)
+    text = Browser().lex(body, self.entities)
 
-    self.assertEqual(mock_stdout.getvalue(), '')
+    self.assertEqual(text, '')
 
-  def test_show_unicode(self, mock_stdout):
+  def test_show_unicode(self):
     body = '🍐🪄'
-    Browser().lex(body, self.entities)
+    text = Browser().lex(body, self.entities)
 
-    self.assertEqual(mock_stdout.getvalue(), body)
+    self.assertEqual(text, body)
 
 
 @patch('sys.stdout', new_callable=io.StringIO)
@@ -286,7 +285,7 @@ class TestBrowserLoad(unittest.TestCase):
   def test_load_compression_chunked(self, mock_stdout):
     url = "http://browser.engineering/examples/example1-simple.html"
     body_content = gzip.compress(b"Body text")
-    body = bytes(f"{len(body_content)}\r\n{body_content}\r\n0\r\n\r\n", encoding='utf-8')
+    body = bytes(f"{len(body_content)}\r\n", encoding='utf-8') + body_content + bytes("\r\n0\r\n\r\n", encoding='utf-8')
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Content-Encoding: gzip\r\n" + b"Transfer-Encoding: chunked\r\n\r\n" + body
     )

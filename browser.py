@@ -10,22 +10,6 @@ HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 
 
-def layout(text, width):
-  display_list = []
-  cursor_x, cursor_y = HSTEP, VSTEP
-  for c in text:
-    display_list.append((cursor_x, cursor_y, c))
-    cursor_x += HSTEP
-    if c == '\n':
-      cursor_x = HSTEP
-      cursor_y += 1.5 * VSTEP
-    elif cursor_x >= width - HSTEP:
-      cursor_x = HSTEP
-      cursor_y += VSTEP
-
-  return display_list
-
-
 class Browser:
   def __init__(self):
     self.width = WIDTH
@@ -63,8 +47,23 @@ class Browser:
 
   def resize(self, e):
     self.width, self.height = e.width, e.height
-    self.display_list = layout(self.text, self.width)
+    self.layout()
     self.draw()
+
+  def layout(self):
+    display_list = []
+    cursor_x, cursor_y = HSTEP, VSTEP
+    for c in self.text:
+      display_list.append((cursor_x, cursor_y, c))
+      cursor_x += HSTEP
+      if c == '\n':
+        cursor_x = HSTEP
+        cursor_y += 1.5 * VSTEP
+      elif cursor_x >= self.width - HSTEP:
+        cursor_x = HSTEP
+        cursor_y += VSTEP
+
+    self.display_list = display_list
 
   def draw(self):
     self.canvas.delete('all')
@@ -88,7 +87,7 @@ class Browser:
         self.text = self.lex(body, entities)
 
     print(self.text)
-    self.display_list = layout(self.text, self.width)
+    self.layout()
     self.draw()
 
   def lex(self, body: str, entities: Dict[str, Dict[str, str]]):
