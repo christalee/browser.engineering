@@ -285,8 +285,8 @@ class TestBrowserLoad(unittest.TestCase):
 
   def test_load_compression_chunked(self, mock_stdout):
     url = "http://browser.engineering/examples/example1-simple.html"
-    body_text = "5\r\nBody \r\n4\r\ntext\r\n0\r\n\r\n"
-    body = gzip.compress(bytes(body_text, encoding='utf-8'))
+    body_content = gzip.compress(b"Body text")
+    body = bytes(f"{len(body_content)}\r\n{body_content}\r\n0\r\n\r\n", encoding='utf-8')
     socket.respond(
       url, b"HTTP/1.0 200 OK\r\n" + b"Content-Encoding: gzip\r\n" + b"Transfer-Encoding: chunked\r\n\r\n" + body
     )

@@ -10,7 +10,7 @@ HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 
 
-def layout(text):
+def layout(text, width):
   display_list = []
   cursor_x, cursor_y = HSTEP, VSTEP
   for c in text:
@@ -19,7 +19,7 @@ def layout(text):
     if c == '\n':
       cursor_x = HSTEP
       cursor_y += 1.5 * VSTEP
-    elif cursor_x >= WIDTH - HSTEP:
+    elif cursor_x >= width - HSTEP:
       cursor_x = HSTEP
       cursor_y += VSTEP
 
@@ -28,24 +28,42 @@ def layout(text):
 
 class Browser:
   def __init__(self):
+    self.width = WIDTH
+    self.height = HEIGHT
     self.window = tkinter.Tk()
     self.canvas = tkinter.Canvas(
       self.window,
-      width=WIDTH,
-      height=HEIGHT
+      width=self.width,
+      height=self.height
     )
-    self.canvas.pack()
+    self.canvas.pack(fill=tkinter.BOTH, expand=True)
+    self.text = ''
     self.display_list = []
     self.scroll = 0
     self.window.bind("<Down>", self.scrolldown)
     self.window.bind("<Up>", self.scrollup)
+    self.window.bind("<Button-4>", self.scrolldelta)
+    self.window.bind("<Button-5>", self.scrolldelta)
+    self.window.bind("<Configure>", self.resize)
+    # self.window.bind("<MouseWheel>", self.scrolldelta)
+
+  def scrolldelta(self, e):
+    if e.num == 5:
+      self.scrolldown(e)
+    elif e.num == 4:
+      self.scrollup(e)
 
   def scrolldown(self, e):
     self.scroll += SCROLL_STEP
     self.draw()
 
   def scrollup(self, e):
-    self.scroll -= SCROLL_STEP
+    self.scroll = max(0, self.scroll - SCROLL_STEP)
+    self.draw()
+
+  def resize(self, e):
+    self.width, self.height = e.width, e.height
+    self.display_list = layout(self.text, self.width)
     self.draw()
 
   def draw(self):
@@ -55,7 +73,7 @@ class Browser:
       if y + VSTEP < self.scroll:
         continue
       # omit characters below the viewport
-      if y > self.scroll + HEIGHT:
+      if y > self.scroll + self.height:
         continue
       self.canvas.create_text(x, y - self.scroll, text=c)
 
@@ -63,16 +81,14 @@ class Browser:
     with open('entities.json', 'r', encoding='utf-8') as f:
       entities = json.load(f)
     body = url.request(num_redirects)
-    text = ''
-    cursor_x, cursor_y = HSTEP, VSTEP
     if body:
       if url.view_source:
-        text = body
+        self.text = body
       else:
-        text = self.lex(body, entities)
+        self.text = self.lex(body, entities)
 
-    print(text)
-    self.display_list = layout(text)
+    print(self.text)
+    self.display_list = layout(self.text, self.width)
     self.draw()
 
   def lex(self, body: str, entities: Dict[str, Dict[str, str]]):
