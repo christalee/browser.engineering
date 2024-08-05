@@ -12,33 +12,43 @@ MAX_REDIRECTS = 3
 class URL:
   def __init__(self, url: str):
     self.view_source = False
-    if url.startswith('data:'):
-      self.scheme, url = url.split(':', 1)
-    else:
-      if url.startswith('view-source:'):
-        self.view_source = True
-        _, url = url.split(":", 1)
-      self.scheme, url = url.split("://", 1)
-    assert self.scheme in ['http', 'https', 'file', 'data']
+    self.is_malformed = False
+    try:
+      if url.startswith('data:'):
+        self.scheme, url = url.split(':', 1)
+      elif url.startswith("about:"):
+        self.is_malformed = True
+        self.scheme, url = url.split(":", 1)
+      else:
+        if url.startswith('view-source:'):
+          self.view_source = True
+          _, url = url.split(":", 1)
+        self.scheme, url = url.split("://", 1)
+      assert self.scheme in ['http', 'https', 'file', 'data', 'about']
 
-    self.get_host_path(url)
-    if self.scheme == 'http':
-      self.port = 80
-    elif self.scheme == 'https':
-      self.port = 443
-    elif self.scheme == 'file':
-      self.port = 0
-      if not self.host:
-        self.host = 'localhost'
-    elif self.scheme == "data":
-      self.port = 0
-      # These are bad names for what is really the MIME type and content
-      self.host, self.path = url.split(',', 1)
-    if ":" in self.host:
-      self.host, port = self.host.split(":", 1)
-      self.port = int(port)
+      self.get_host_path(url)
+      if self.scheme == 'http':
+        self.port = 80
+      elif self.scheme == 'https':
+        self.port = 443
+      elif self.scheme == 'file':
+        self.port = 0
+        if not self.host:
+          self.host = 'localhost'
+      elif self.scheme == "data":
+        self.port = 0
+        # These are bad names for what is really the MIME type and content
+        self.host, self.path = url.split(',', 1)
+      elif self.scheme == 'about':
+        self.port = 0
+      if ":" in self.host:
+        self.host, port = self.host.split(":", 1)
+        self.port = int(port)
 
-    self.socket = sockets.get((self.host, self.port), None)
+      self.socket = sockets.get((self.host, self.port), None)
+
+    except:
+      self.is_malformed = True
 
   def get_host_path(self, url: str):
     if '/' not in url:
@@ -141,7 +151,9 @@ class URL:
     return content
 
   def request(self, num_redirects: int = 0):
-    if self.scheme == 'file':
+    if self.is_malformed:
+      return None
+    elif self.scheme == 'file':
       with open(self.path, 'r', encoding="utf-8") as f:
         return f.read()
     if self.scheme == "data" and self.host == "text/html":

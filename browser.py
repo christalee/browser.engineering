@@ -112,20 +112,22 @@ class Browser:
     self.canvas.create_rectangle(x0, y0, x1, y1, fill="blue")
 
   def load(self, url: URL, num_redirects: int = 0):
-    with open('entities.json', 'r', encoding='utf-8') as f:
-      entities = json.load(f)
     body = url.request(num_redirects)
     if body:
       if url.view_source:
         self.text = body
       else:
-        self.text = self.lex(body, entities)
+        self.text = self.lex(body)
+    else:
+      self.text = ''
 
     print(self.text)
     self.layout()
     self.draw()
 
-  def lex(self, body: str, entities: Dict[str, Dict[str, str]]):
+  def lex(self, body: str):
+    with open('entities.json', 'r', encoding='utf-8') as f:
+      entities = json.load(f)
     text = ''
     in_tag = False
     i = 0
