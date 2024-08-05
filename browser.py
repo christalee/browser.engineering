@@ -2,6 +2,8 @@ import json
 import re
 import tkinter as tk
 from typing import Dict
+import emoji
+from PIL import ImageTk, Image
 
 from url import URL
 
@@ -9,6 +11,8 @@ WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 SCROLLBAR_WIDTH = 12
+
+emoji_dict = {}
 
 
 class Browser:
@@ -81,7 +85,16 @@ class Browser:
       # omit characters below the viewport
       if y > self.scroll + self.screen_height:
         continue
-      self.canvas.create_text(x, y - self.scroll, text=c)
+      if emoji.is_emoji(c):
+        # TODO make this handle multi-char emoji, e.g. 😮‍💨
+        # This format string is magic; TODO find an explainer
+        emoji_png = '{:04x}'.format(ord(c)).upper()
+        if emoji_png not in emoji_dict:
+          image = Image.open(f'openmoji-72x72-color/{emoji_png}.png')
+          emoji_dict[emoji_png] = ImageTk.PhotoImage(image.resize((20, 20)))
+        self.canvas.create_image(x, y - self.scroll, image=emoji_dict[emoji_png])
+      else:
+        self.canvas.create_text(x, y - self.scroll, text=c)
 
     if self.doc_height > self.screen_height:
       self.draw_scrollbar()
