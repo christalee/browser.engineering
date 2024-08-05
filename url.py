@@ -116,10 +116,12 @@ class URL:
     if 'transfer-encoding' in response_headers and response_headers['transfer-encoding'] == 'chunked':
       content = b''
       while True:
-        length = int(raw_response.readline().strip().decode(encoding='utf-8'))
-        if length == 0:
+        size = raw_response.readline().strip().decode(encoding='utf-8')
+        if size == '0' or not size:
           raw_response.readline()
           break
+        else:
+          length = int(size, 16)
         line = raw_response.read(length)
         # need to read past \r\n
         raw_response.read(2)
