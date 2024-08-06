@@ -13,38 +13,33 @@ from test_utils import socket, ssl
 
 class TestBrowserLex(unittest.TestCase):
   # Tests for lex()
-  def setUp(self):
-    self.entities = {}
-    with open('entities.json', 'r', encoding='utf-8') as f:
-      self.entities = json.load(f)
-
-  def test_show_no_tags(self):
+  def test_lex_no_tags(self):
     body = 'Hello, world!'
-    text = Browser().lex(body, self.entities)
+    text = Browser().lex(body)
 
     self.assertEqual(text, body)
 
-  def test_show_tags(self):
+  def test_lex_tags(self):
     body = '<pre>Hello, world!</pre>'
-    text = Browser().lex(body, self.entities)
+    text = Browser().lex(body)
 
     self.assertEqual(text, 'Hello, world!')
 
-  def test_show_entities(self):
+  def test_lex_entities(self):
     body = '&lt;div&gt;'
-    text = Browser().lex(body, self.entities)
+    text = Browser().lex(body)
 
     self.assertEqual(text, '<div>')
 
-  def test_show_invalid_entities(self):
+  def test_lex_invalid_entities(self):
     body = '&asdf;'
-    text = Browser().lex(body, self.entities)
+    text = Browser().lex(body)
 
     self.assertEqual(text, '')
 
-  def test_show_unicode(self):
+  def test_lex_unicode(self):
     body = '🍐🪄'
-    text = Browser().lex(body, self.entities)
+    text = Browser().lex(body)
 
     self.assertEqual(text, body)
 

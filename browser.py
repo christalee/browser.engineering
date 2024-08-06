@@ -1,9 +1,9 @@
 import json
 import re
 import tkinter as tk
-from typing import Dict
 import emoji
 from PIL import ImageTk, Image
+import argparse
 
 from url import URL
 
@@ -16,7 +16,8 @@ emoji_dict = {}
 
 
 class Browser:
-  def __init__(self):
+  def __init__(self, rtl=False):
+    self.rtl = rtl
     self.screen_width = WIDTH
     self.screen_height = HEIGHT
     self.text = ''
@@ -61,16 +62,28 @@ class Browser:
 
   def layout(self):
     display_list = []
-    cursor_x, cursor_y = HSTEP, VSTEP
-    for c in self.text:
-      display_list.append((cursor_x, cursor_y, c))
-      cursor_x += HSTEP
-      if c == '\n':
-        cursor_x = HSTEP
-        cursor_y += 1.5 * VSTEP
-      elif cursor_x >= self.screen_width - HSTEP - SCROLLBAR_WIDTH:
-        cursor_x = HSTEP
-        cursor_y += VSTEP
+    if self.rtl:
+      cursor_x, cursor_y = self.screen_width - HSTEP - SCROLLBAR_WIDTH, VSTEP
+      for c in self.text:
+        display_list.append((cursor_x, cursor_y, c))
+        cursor_x -= HSTEP
+        if c == '\n':
+          cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
+          cursor_y += 1.5 * VSTEP
+        elif cursor_x <= 0:
+          cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
+          cursor_y += VSTEP
+    else:
+      cursor_x, cursor_y = HSTEP, VSTEP
+      for c in self.text:
+        display_list.append((cursor_x, cursor_y, c))
+        cursor_x += HSTEP
+        if c == '\n':
+          cursor_x = HSTEP
+          cursor_y += 1.5 * VSTEP
+        elif cursor_x >= self.screen_width - HSTEP - SCROLLBAR_WIDTH:
+          cursor_x = HSTEP
+          cursor_y += VSTEP
 
     self.display_list = display_list
     if display_list:
@@ -153,11 +166,12 @@ class Browser:
 
 
 if __name__ == "__main__":
-  import sys
+  TEST_FILE = 'file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'
+  parser = argparse.ArgumentParser()
+  parser.add_argument("-rtl", help="Layout characters from right to left", action="store_true")
+  parser.add_argument("url", help="URL(s) to open", nargs="*", default=[TEST_FILE])
 
-  if len(sys.argv) > 1:
-    for url in sys.argv[1:]:
-      Browser().load(URL(url))
-  else:
-    Browser().load(URL('file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'))
+  args = parser.parse_args()
+  for url in args.url:
+    Browser(rtl=args.rtl).load(URL(url))
   tk.mainloop()
