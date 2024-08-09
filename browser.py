@@ -1,9 +1,11 @@
 import json
 import re
 import tkinter as tk
+from tkinter import font
 import emoji
 from PIL import ImageTk, Image
 import argparse
+from typing import List, Union, Literal
 
 from url import URL
 
@@ -15,15 +17,106 @@ SCROLLBAR_WIDTH = 12
 emoji_dict = {}
 
 
+class Text:
+  def __init__(self, text: str):
+    self.text = text
+
+
+class Tag:
+  def __init__(self, tag: str):
+    self.tag = tag
+
+
+class Layout:
+  def __init__(self, tokens: List[Union[Tag, Text]], screen_width: int, rtl: bool = False):
+    self.rtl = rtl
+    self.screen_width = screen_width
+    self.display_list = []
+    if self.rtl:
+      self.cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
+    else:
+      self.cursor_x = HSTEP
+    self.cursor_y: int = VSTEP
+    self.size: int = 16
+    self.weight: Literal['normal', 'bold'] = "normal"
+    self.style: Literal['roman', 'italic'] = "roman"
+    for t in tokens:
+      self.token(t)
+
+  def token(self, t):
+    if isinstance(t, Text):
+      for w in t.text.split(" "):
+        self.word(w)
+    elif t.tag == "i":
+      self.style = "italic"
+    elif t.tag == "/i":
+      self.style = "roman"
+    elif t.tag == "b":
+      self.weight = "bold"
+    elif t.tag == "/b":
+      self.weight = "normal"
+    elif t.tag == "small":
+      self.size -= 2
+    elif t.tag == "/small":
+      self.size += 2
+    elif t.tag == "big":
+      self.size += 4
+    elif t.tag == "/big":
+      self.size -= 4
+
+  def word(self, w):
+    f = font.Font(
+      size=self.size,
+      weight=self.weight,
+      slant=self.style
+    )
+    if '\n' in w:
+      newlines = w.split('\n')
+      for w in newlines[:-1]:
+        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
+        self.cursor_y += 1.5 * VSTEP
+        if self.rtl:
+          self.cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
+        else:
+          self.cursor_x = HSTEP
+      last = newlines[-1]
+      if last:
+        self.display_word(last, f)
+    else:
+      self.display_word(w, f)
+
+  def display_word(self, w, f):
+    space = f.measure(" ")
+    linebreak = f.metrics("linespace") * 1.25
+    width = f.measure(w)
+    if self.rtl:
+      if self.cursor_x - (width + space) > 0:
+        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
+      else:
+        self.cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
+        self.cursor_y += linebreak
+        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
+      self.cursor_x -= (width + space)
+    else:
+      if self.cursor_x + width + space < self.screen_width - SCROLLBAR_WIDTH:
+        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
+      else:
+        self.cursor_x = HSTEP
+        self.cursor_y += linebreak
+        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
+      self.cursor_x += width + space
+
+
 class Browser:
   def __init__(self, rtl=False):
     self.rtl = rtl
     self.screen_width = WIDTH
     self.screen_height = HEIGHT
-    self.text = ''
+    self.tokens = []
     self.display_list = []
     self.doc_height = 0
     self.scroll = 0
+    self.layout = Layout(self.tokens, self.screen_width, self.rtl)
 
     self.window = tk.Tk()
     self.canvas = tk.Canvas(
@@ -38,7 +131,13 @@ class Browser:
     self.window.bind("<Button-4>", self.scrolldelta)
     self.window.bind("<Button-5>", self.scrolldelta)
     self.window.bind("<Configure>", self.resize)
-    # self.window.bind("<MouseWheel>", self.scrolldelta)
+    self.window.bind("<MouseWheel>", self.scrollmouse)
+
+  def scrollmouse(self, e):
+    if e.delta < 0:
+      self.scrolldown(e)
+    else:
+      self.scrollup(e)
 
   def scrolldelta(self, e):
     if e.num == 5:
@@ -47,8 +146,8 @@ class Browser:
       self.scrollup(e)
 
   def scrolldown(self, e):
-    top_of_last_screen = self.doc_height - self.screen_height
-    self.scroll = min(top_of_last_screen, self.scroll + SCROLL_STEP)
+    bottom_of_last_screen = self.doc_height + self.layout.size + VSTEP - self.screen_height
+    self.scroll = min(bottom_of_last_screen, self.scroll + SCROLL_STEP)
     self.draw()
 
   def scrollup(self, e):
@@ -57,41 +156,15 @@ class Browser:
 
   def resize(self, e):
     self.screen_width, self.screen_height = e.width, e.height
-    self.layout()
+    self.layout = Layout(self.tokens, self.screen_width, self.rtl)
+    self.display_list = self.layout.display_list
+    if self.display_list:
+      self.doc_height = self.display_list[-1][1]
     self.draw()
-
-  def layout(self):
-    display_list = []
-    if self.rtl:
-      cursor_x, cursor_y = self.screen_width - HSTEP - SCROLLBAR_WIDTH, VSTEP
-      for c in self.text:
-        display_list.append((cursor_x, cursor_y, c))
-        cursor_x -= HSTEP
-        if c == '\n':
-          cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
-          cursor_y += 1.5 * VSTEP
-        elif cursor_x <= 0:
-          cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
-          cursor_y += VSTEP
-    else:
-      cursor_x, cursor_y = HSTEP, VSTEP
-      for c in self.text:
-        display_list.append((cursor_x, cursor_y, c))
-        cursor_x += HSTEP
-        if c == '\n':
-          cursor_x = HSTEP
-          cursor_y += 1.5 * VSTEP
-        elif cursor_x >= self.screen_width - HSTEP - SCROLLBAR_WIDTH:
-          cursor_x = HSTEP
-          cursor_y += VSTEP
-
-    self.display_list = display_list
-    if display_list:
-      self.doc_height = display_list[-1][1]
 
   def draw(self):
     self.canvas.delete('all')
-    for x, y, c in self.display_list:
+    for x, y, c, font in self.display_list:
       # omit characters above the viewport
       if y + VSTEP < self.scroll:
         continue
@@ -99,15 +172,17 @@ class Browser:
       if y > self.scroll + self.screen_height:
         continue
       if emoji.is_emoji(c):
-        # TODO make this handle multi-char emoji, e.g. 😮‍💨
-        # This format string is magic; TODO find an explainer
-        emoji_png = '{:04x}'.format(ord(c)).upper()
+        codepoints = []
+        for char in c:
+          # This format string is magic; TODO find an explainer
+          codepoints.append('{:04x}'.format(ord(char)).upper())
+        emoji_png = '-'.join(codepoints)
         if emoji_png not in emoji_dict:
           image = Image.open(f'openmoji-72x72-color/{emoji_png}.png')
           emoji_dict[emoji_png] = ImageTk.PhotoImage(image.resize((20, 20)))
-        self.canvas.create_image(x, y - self.scroll, image=emoji_dict[emoji_png])
+        self.canvas.create_image(x, y - self.scroll, anchor="nw", image=emoji_dict[emoji_png])
       else:
-        self.canvas.create_text(x, y - self.scroll, text=c)
+        self.canvas.create_text(x, y - self.scroll, text=c, anchor="nw", font=font)
 
     if self.doc_height > self.screen_height:
       self.draw_scrollbar()
@@ -128,41 +203,52 @@ class Browser:
     body = url.request(num_redirects)
     if body:
       if url.view_source:
-        self.text = body
+        # TODO fix this to display tags in the browser
+        print(body)
       else:
-        self.text = self.lex(body)
+        self.tokens = self.lex(body)
     else:
-      self.text = ''
+      self.tokens = []
 
-    print(self.text)
-    self.layout()
+    self.layout = Layout(self.tokens, self.screen_width, self.rtl)
+    self.display_list = self.layout.display_list
+    if self.display_list:
+      self.doc_height = self.display_list[-1][1]
     self.draw()
 
   def lex(self, body: str):
     with open('entities.json', 'r', encoding='utf-8') as f:
       entities = json.load(f)
-    text = ''
+    output = []
+    buffer = ''
     in_tag = False
     i = 0
     while i < len(body):
       c = body[i]
       if c == "<":
         in_tag = True
+        if buffer:
+          output.append(Text(buffer))
+        buffer = ""
       elif c == ">":
         in_tag = False
-      elif not in_tag:
-        if c == "&":
-          m = re.search(r"&.*?;", body[i:])
-          if m:
-            entity = m.group(0)
-            if entity in entities:
-              text += entities[entity]['characters']
-            i += len(entity) - 1
-        else:
-          text += c
+        output.append(Tag(buffer))
+        buffer = ''
+      elif not in_tag and c == "&":
+        m = re.search(r"&.*?;", body[i:])
+        if m:
+          entity = m.group(0)
+          if entity in entities:
+            buffer += entities[entity]['characters']
+          i += len(entity) - 1
+      else:
+        buffer += c
       i += 1
 
-    return text
+    if not in_tag and buffer:
+      output.append(Text(buffer))
+
+    return output
 
 
 if __name__ == "__main__":
