@@ -15,15 +15,14 @@ emoji_dict = {}
 
 
 class Browser:
-  def __init__(self, rtl=False):
-    self.rtl = rtl
+  def __init__(self):
     self.screen_width = WIDTH
     self.screen_height = HEIGHT
     self.tokens = []
     self.display_list = []
     self.doc_height = 0
     self.scroll = 0
-    self.layout = Layout(self.tokens, self.screen_width, self.rtl)
+    self.layout = Layout(self.tokens, self.screen_width)
 
     self.window = tk.Tk()
     self.canvas = tk.Canvas(
@@ -63,7 +62,7 @@ class Browser:
 
   def resize(self, e):
     self.screen_width, self.screen_height = e.width, e.height
-    self.layout = Layout(self.tokens, self.screen_width, self.rtl)
+    self.layout = Layout(self.tokens, self.screen_width)
     self.display_list = self.layout.display_list
     if self.display_list:
       self.doc_height = self.display_list[-1][1]
@@ -116,7 +115,7 @@ class Browser:
     else:
       self.tokens = []
 
-    self.layout = Layout(self.tokens, self.screen_width, self.rtl)
+    self.layout = Layout(self.tokens, self.screen_width)
     self.display_list = self.layout.display_list
     if self.display_list:
       self.doc_height = self.display_list[-1][1]
@@ -160,10 +159,9 @@ class Browser:
 if __name__ == "__main__":
   TEST_FILE = 'file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'
   parser = argparse.ArgumentParser()
-  parser.add_argument("-rtl", help="Layout characters from right to left", action="store_true")
   parser.add_argument("url", help="URL(s) to open", nargs="*", default=[TEST_FILE])
 
   args = parser.parse_args()
   for url in args.url:
-    Browser(rtl=args.rtl).load(URL(url))
+    Browser().load(URL(url))
   tk.mainloop()
