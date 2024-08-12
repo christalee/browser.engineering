@@ -49,6 +49,7 @@ class Tag:
 class Layout:
   def __init__(self, tokens: List[Union[Tag, Text]], screen_width: int, rtl: bool = False):
     self.rtl = rtl
+    self.centering = False
     self.screen_width = screen_width
     self.line = []
     self.display_list = []
@@ -90,27 +91,40 @@ class Layout:
       self.flush()
     elif tok.tag == "/p":
       self.flush()
+    elif tok.tag == 'h1 class="title"':
+      self.centering = True
+    elif tok.tag == "/h1":
+      self.centering = False
 
   def word(self, word):
-    font = get_font(self.size, self.weight, self.style)
     if '\n' in word:
       newlines = word.split('\n')
       for w in newlines[:-1]:
-        self.line.append((self.cursor_x, w, font))
+        self.line.append({"x": self.cursor_x,
+                          "word": w,
+                          "size": self.size,
+                          "weight": self.weight,
+                          "style": self.style,
+                          "centering": self.centering})
         self.flush()
       last = newlines[-1]
       if last:
-        self.display_word(last, font)
+        self.display_word(last)
     else:
-      self.display_word(word, font)
+      self.display_word(word)
 
-  def display_word(self, word, font):
+  def display_word(self, word):
     space = get_measure(" ", self.size, self.weight, self.style)
     width = get_measure(word, self.size, self.weight, self.style)
     if self.rtl:
       if self.cursor_x - (width + space) > 0:
         # If there's still room on this line, add to self.line and advance cursor_x
-        self.line.append((self.cursor_x, word, font))
+        self.line.append({"x": self.cursor_x,
+                          "word": word,
+                          "size": self.size,
+                          "weight": self.weight,
+                          "style": self.style,
+                          "centering": self.centering})
         self.cursor_x -= (width + space)
       else:
         # Otherwise, finish this line
@@ -118,7 +132,12 @@ class Layout:
     else:
       if self.cursor_x + width + space < self.screen_width - SCROLLBAR_WIDTH:
         # If there's still room on this line, add to self.line and advance cursor_x
-        self.line.append((self.cursor_x, word, font))
+        self.line.append({"x": self.cursor_x,
+                          "word": word,
+                          "size": self.size,
+                          "weight": self.weight,
+                          "style": self.style,
+                          "centering": self.centering})
         self.cursor_x += width + space
       else:
         # Otherwise, finish this line
@@ -127,12 +146,28 @@ class Layout:
   def flush(self):
     if not self.line:
       return
-    metrics = [font.metrics() for x, word, font in self.line]
+
+    centering = any([entry['centering'] for entry in self.line])
+    if centering:
+      last_entry = self.line[-1]
+      last_length = get_measure(last_entry['word'], last_entry['size'], last_entry['weight'], last_entry["style"])
+      line_length = (last_entry["x"] - self.line[0]["x"]) + last_length
+      delta_x = (self.screen_width - line_length) / 2
+    else:
+      delta_x = 0
+
+    fonts = [get_font(entry['size'], entry['weight'], entry['style']) for entry in self.line]
+    metrics = [font.metrics() for font in fonts]
     max_ascent = max([metric["ascent"] for metric in metrics])
     baseline = self.cursor_y + 1.25 * max_ascent
-    for x, word, font in self.line:
+
+    for i, entry in enumerate(self.line):
+      font = fonts[i]
       y = baseline - font.metrics("ascent")
-      self.display_list.append((x, y, word, font))
+      if centering:
+        self.display_list.append((entry['x'] + delta_x, y, entry['word'], font))
+      else:
+        self.display_list.append((entry['x'], y, entry['word'], font))
     max_descent = max([metric['descent'] for metric in metrics])
     self.cursor_y = baseline + 1.25 * max_descent
     if self.rtl:
