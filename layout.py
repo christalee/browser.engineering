@@ -89,10 +89,8 @@ class Layout:
       self.flush()
     elif tok.tag == 'h1 class="title"':
       self.centering = True
-      self.size = int(self.size * 1.5)
     elif tok.tag == "/h1":
       self.centering = False
-      self.size = int(self.size / 1.5)
 
   def word(self, word):
     if '\n' in word:
@@ -124,10 +122,39 @@ class Layout:
                         "centering": self.centering})
       self.cursor_x += width + space
     else:
-      # Otherwise, finish this line
-      self.flush()
+      if u"\u00AD" in word:
+        parts = word.split(u"\u00AD")
+        hyphen = get_measure("-", self.size, self.weight, self.style)
+        leftovers = ''
+        for part in parts:
+          part_width = get_measure(part, self.size, self.weight, self.style)
+          if self.cursor_x + part_width + hyphen < self.screen_width - SCROLLBAR_WIDTH:
+            self.line.append({
+              "x": self.cursor_x,
+              "word": part,
+              "size": self.size,
+              "weight": self.weight,
+              "style": self.style,
+              "centering": self.centering
+            })
+            self.cursor_x += part_width
+          else:
+            leftovers += part
 
-  def flush(self):
+        self.line.append({
+          "x": self.cursor_x,
+          "word": "-",
+          "size": self.size,
+          "weight": self.weight,
+          "style": self.style,
+          "centering": self.centering
+        })
+        self.flush(leftovers)
+      else:
+        # Otherwise, finish this line
+        self.flush()
+
+  def flush(self, nextline: str = ''):
     if not self.line:
       return
 
@@ -155,4 +182,16 @@ class Layout:
     max_descent = max([metric['descent'] for metric in metrics])
     self.cursor_y = baseline + 1.25 * max_descent
     self.cursor_x = HSTEP
-    self.line = []
+    if nextline:
+      self.line = [{
+        "x": self.cursor_x,
+        "word": nextline,
+        "size": self.size,
+        "weight": self.weight,
+        "style": self.style,
+        "centering": self.centering
+      }]
+      self.cursor_x += get_measure(nextline, self.size, self.weight, self.style) + get_measure(" ", self.size,
+                                                                                               self.weight, self.style)
+    else:
+      self.line = []
