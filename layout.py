@@ -9,16 +9,23 @@ class Text:
   def __init__(self, text: str):
     self.text = text
 
+  def __repr__(self):
+    return self.text
+
 
 class Tag:
   def __init__(self, tag: str):
     self.tag = tag
+
+  def __repr__(self):
+    return self.tag
 
 
 class Layout:
   def __init__(self, tokens: List[Union[Tag, Text]], screen_width: int, rtl: bool = False):
     self.rtl = rtl
     self.screen_width = screen_width
+    self.line = []
     self.display_list = []
     if self.rtl:
       self.cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
@@ -30,6 +37,7 @@ class Layout:
     self.style: Literal['roman', 'italic'] = "roman"
     for t in tokens:
       self.token(t)
+    self.flush()
 
   def token(self, t):
     if isinstance(t, str): \
@@ -53,6 +61,10 @@ class Layout:
       self.size += 4
     elif t.tag == "/big":
       self.size -= 4
+    elif t.tag == "br" or t.tag == "br /":
+      self.flush()
+    elif t.tag == "/p":
+      self.flush()
 
   def word(self, w):
     f = font.Font(
@@ -63,12 +75,8 @@ class Layout:
     if '\n' in w:
       newlines = w.split('\n')
       for w in newlines[:-1]:
-        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
-        self.cursor_y += 1.5 * VSTEP
-        if self.rtl:
-          self.cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
-        else:
-          self.cursor_x = HSTEP
+        self.line.append((self.cursor_x, w, f))
+        self.flush()
       last = newlines[-1]
       if last:
         self.display_word(last, f)
@@ -77,21 +85,37 @@ class Layout:
 
   def display_word(self, w, f):
     space = f.measure(" ")
-    linebreak = f.metrics("linespace") * 1.25
     width = f.measure(w)
     if self.rtl:
       if self.cursor_x - (width + space) > 0:
-        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
+        # If there's still room on this line, add to self.line and advance cursor_x
+        self.line.append((self.cursor_x, w, f))
+        self.cursor_x -= (width + space)
       else:
-        self.cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
-        self.cursor_y += linebreak
-        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
-      self.cursor_x -= (width + space)
+        # Otherwise, finish this line
+        self.flush()
     else:
       if self.cursor_x + width + space < self.screen_width - SCROLLBAR_WIDTH:
-        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
+        # If there's still room on this line, add to self.line and advance cursor_x
+        self.line.append((self.cursor_x, w, f))
+        self.cursor_x += width + space
       else:
-        self.cursor_x = HSTEP
-        self.cursor_y += linebreak
-        self.display_list.append((self.cursor_x, self.cursor_y, w, f))
-      self.cursor_x += width + space
+        # Otherwise, finish this line
+        self.flush()
+
+  def flush(self):
+    if not self.line:
+      return
+    metrics = [f.metrics() for x, w, f in self.line]
+    max_ascent = max([metric["ascent"] for metric in metrics])
+    baseline = self.cursor_y + 1.25 * max_ascent
+    for x, w, f in self.line:
+      y = baseline - f.metrics("ascent")
+      self.display_list.append((x, y, w, f))
+    max_descent = max([metric['descent'] for metric in metrics])
+    self.cursor_y = baseline + 1.25 * max_descent
+    if self.rtl:
+      self.cursor_x = self.screen_width - HSTEP - SCROLLBAR_WIDTH
+    else:
+      self.cursor_x = HSTEP
+    self.line = []

@@ -86,7 +86,7 @@ class Browser:
         emoji_png = '-'.join(codepoints)
         if emoji_png not in emoji_dict:
           image = Image.open(f'openmoji-72x72-color/{emoji_png}.png')
-          emoji_dict[emoji_png] = ImageTk.PhotoImage(image.resize((20, 20)))
+          emoji_dict[emoji_png] = ImageTk.PhotoImage(image.resize((16, 16)))
         self.canvas.create_image(x, y - self.scroll, anchor="nw", image=emoji_dict[emoji_png])
       else:
         self.canvas.create_text(x, y - self.scroll, text=c, anchor="nw", font=f)
