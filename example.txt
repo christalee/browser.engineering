@@ -11,8 +11,12 @@ This is an example file full of text.
 <big>An example</big> of some <small>mixed-size text</small>
 
 <h1 class="title">This should be centered</h1>
-<p>This should not be centered</p>
+<h1>This should not be centered</h1>
+
+This line has a<sup>2</sup> + b<sup>2</sup>, ok?
 
 <p>Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book.</p>
 It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.
 It is a long established fact that a reader will be distracted by the readable content of a page when looking at its layout. The point of using Lorem Ipsum is that it has a more-or-less normal distribution of letters,<br /> as opposed to using 'Content here, content here', making it look like readable English. Many desktop publishing packages and web page editors now use Lorem Ipsum as their default model text, and a search for 'lorem ipsum' will uncover many web sites still in their infancy. Various versions have evolved over the years, sometimes by accident, sometimes on purpose (injected humour and the like).
+
+<p> If a word doesn’t fit at the end of a line, check if it has soft hyphens, and if so break the word across lines. Remember that a word can have multiple soft hyphens in it, and make sure to draw a hyphen when you break a word. The word “super­&shy;cali­&shy;fragi­&shy;listic&shy;­expi&shy;­ali&shy;­docious” is a good test case.</p>
