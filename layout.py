@@ -11,11 +11,20 @@ MEASURES = {}
 def get_font(size, weight, style):
   key = (size, weight, style)
   if key not in FONTS:
-    font = tkfont.Font(
-      size=size,
-      weight=weight,
-      slant=style
-    )
+    if "fixed_width" in style:
+      s = style.replace("fixed_width", "").strip()
+      font = tkfont.Font(
+        family="Courier",
+        size=size,
+        weight=weight,
+        slant=s
+      )
+    else:
+      font = tkfont.Font(
+        size=size,
+        weight=weight,
+        slant=style
+      )
     label = tk.Label(font=font)
     FONTS[key] = (font, label)
   return FONTS[key][0]
@@ -55,23 +64,30 @@ class Layout:
     self.display_list = []
     self.cursor_x = HSTEP
     self.cursor_y: int = VSTEP
-    self.size: Union[int, float] = 16
+    self.size: int = 16
     self.weight: Literal['normal', 'bold'] = "normal"
-    self.style: Literal['roman', 'italic'] = "roman"
+    self.style: Literal['roman', 'italic', 'roman fixed_width', "italic fixed_width"] = "roman"
     for tok in tokens:
       self.token(tok)
     self.flush()
 
   def token(self, tok):
-    if isinstance(tok, str): \
+    if isinstance(tok, str):
+      self.style += " fixed_width"
       self.word(tok)
     elif isinstance(tok, Text):
       for word in tok.text.split(" "):
         self.word(word)
     elif tok.tag == "i":
-      self.style = "italic"
+      if "fixed_width" in self.style:
+        self.style = "italic fixed_width"
+      else:
+        self.style = "italic"
     elif tok.tag == "/i":
-      self.style = "roman"
+      if "fixed_width" in self.style:
+        self.style = "roman fixed_width"
+      else:
+        self.style = "roman"
     elif tok.tag == "b":
       self.weight = "bold"
     elif tok.tag == "/b":
@@ -89,18 +105,23 @@ class Layout:
     elif tok.tag == "/p":
       self.flush()
     elif tok.tag.startswith('h1'):
-      self.size = self.size * 1.5
+      self.size = int(self.size * 1.5)
       if 'class="title"' in tok.tag:
         self.centering = True
     elif tok.tag == "/h1":
-      self.size = self.size / 1.5
+      self.size = int(self.size / 1.5)
       self.centering = False
     elif tok.tag == "sup":
-      self.size = self.size / 2
+      self.size = int(self.size / 2)
       self.superscript = True
     elif tok.tag == "/sup":
-      self.size = self.size * 2
+      self.size = int(self.size * 2)
       self.superscript = False
+    elif tok.tag.startswith("pre"):
+      # TODO don't break lines inside pre tags
+      self.style += " fixed_width"
+    elif tok.tag == "/pre":
+      self.style = self.style.replace("fixed_width", "").strip()
 
   def word(self, word):
     if '\n' in word:
@@ -179,7 +200,7 @@ class Layout:
         # Otherwise, finish this line
         self.flush()
 
-  def flush(self, nextline: Dict[str, Union[int, str]] = None):
+  def flush(self, nextline: Dict[str, Union[int, str, bool]] = None):
     if not self.line:
       return
 
