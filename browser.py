@@ -1,12 +1,11 @@
-import json
-import re
 import tkinter as tk
 import emoji
 from PIL import ImageTk, Image
 import argparse
 
 from url import URL
-from layout import Layout, VSTEP, SCROLLBAR_WIDTH, Text, Tag
+from layout import Layout, VSTEP, SCROLLBAR_WIDTH
+from parser import HTMLParser
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
@@ -18,11 +17,13 @@ class Browser:
   def __init__(self):
     self.screen_width = WIDTH
     self.screen_height = HEIGHT
+    # self.tokens = HTMLParser(["<>"]).parse()
     self.tokens = []
     self.display_list = []
     self.doc_height = 0
     self.scroll = 0
-    self.layout = Layout(self.tokens, self.screen_width)
+    # self.layout = Layout(self.tokens, self.screen_width)
+    self.layout = None
 
     self.window = tk.Tk()
     self.canvas = tk.Canvas(
@@ -111,7 +112,7 @@ class Browser:
       if url.view_source:
         self.tokens = body.split(" ")
       else:
-        self.tokens = self.lex(body)
+        self.tokens = HTMLParser(body).parse()
     else:
       self.tokens = []
 
@@ -120,40 +121,6 @@ class Browser:
     if self.display_list:
       self.doc_height = self.display_list[-1][1]
     self.draw()
-
-  def lex(self, body: str):
-    with open('entities.json', 'r', encoding='utf-8') as f:
-      entities = json.load(f)
-    output = []
-    buffer = ''
-    in_tag = False
-    i = 0
-    while i < len(body):
-      c = body[i]
-      if c == "<":
-        in_tag = True
-        if buffer:
-          output.append(Text(buffer))
-        buffer = ""
-      elif c == ">":
-        in_tag = False
-        output.append(Tag(buffer))
-        buffer = ''
-      elif not in_tag and c == "&":
-        m = re.search(r"&.*?;", body[i:])
-        if m:
-          entity = m.group(0)
-          if entity in entities:
-            buffer += entities[entity]['characters']
-          i += len(entity) - 1
-      else:
-        buffer += c
-      i += 1
-
-    if not in_tag and buffer:
-      output.append(Text(buffer))
-
-    return output
 
 
 if __name__ == "__main__":
