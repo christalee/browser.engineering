@@ -17,12 +17,10 @@ class Browser:
   def __init__(self):
     self.screen_width = WIDTH
     self.screen_height = HEIGHT
-    # self.tokens = HTMLParser(["<>"]).parse()
     self.tokens = []
     self.display_list = []
     self.doc_height = 0
     self.scroll = 0
-    # self.layout = Layout(self.tokens, self.screen_width)
     self.layout = None
 
     self.window = tk.Tk()
@@ -110,7 +108,7 @@ class Browser:
     body = url.request(num_redirects)
     if body:
       if url.view_source:
-        self.tokens = body.split(" ")
+        self.tokens = body.split()
       else:
         self.tokens = HTMLParser(body).parse()
     else:

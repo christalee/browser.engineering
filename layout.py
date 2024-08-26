@@ -154,6 +154,7 @@ class Layout:
                           "centering": self.centering,
                           "superscript": self.superscript
                           })
+        # Because spaces are explicitly included in the wordlist during pre tags, don't include a space
         self.cursor_x += width
     elif self.cursor_x + width + space < self.screen_width - SCROLLBAR_WIDTH:
       # If there's still room on this line, add to self.line and advance cursor_x
@@ -167,6 +168,7 @@ class Layout:
                         })
       self.cursor_x += width + space
     else:
+      # If soft hyphens are present in the word, consider splitting on them
       if u"\u00AD" in word:
         parts = word.split(u"\u00AD")
         hyphen = get_measure("-", self.size, self.weight, self.style)
@@ -175,6 +177,7 @@ class Layout:
         for part in parts:
           part_width = get_measure(part, self.size, self.weight, self.style)
           if self.cursor_x + part_width + hyphen < self.screen_width - SCROLLBAR_WIDTH:
+            # If it fits, add the part to the line
             self.line.append({"x": self.cursor_x,
                               "word": part,
                               "size": self.size,
@@ -192,6 +195,7 @@ class Layout:
 
         leftovers = ''.join([p for p in parts if p not in taken])
         if count > 0:
+          # Don't add a hyphen unless some parts are added to the line
           self.line.append({
             "x": self.cursor_x,
             "word": "-",
@@ -211,8 +215,16 @@ class Layout:
         }
         self.flush(nextline)
       else:
-        # Otherwise, finish this line
-        self.flush()
+        # If there's no more room on this line, finish it with current word starting the next line
+        nextline = {
+          "word": word,
+          "size": self.size,
+          "weight": self.weight,
+          "style": self.style,
+          "centering": self.centering,
+          "superscript": self.superscript
+        }
+        self.flush(nextline)
 
   def flush(self, nextline: Dict[str, Union[int, str, bool]] = None):
     if not self.line:
@@ -220,9 +232,12 @@ class Layout:
 
     centering = any([entry['centering'] for entry in self.line])
     if centering:
+      # Measure the last word
       last_entry = self.line[-1]
       last_length = get_measure(last_entry['word'], last_entry['size'], last_entry['weight'], last_entry["style"])
+      # Determine the line length, including the last word
       line_length = (last_entry["x"] - self.line[0]["x"]) + last_length
+      # Calculate how much to shift each word's x to center
       delta_x = (self.screen_width - line_length) / 2
     else:
       delta_x = 0
