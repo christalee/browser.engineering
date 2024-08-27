@@ -118,27 +118,35 @@ class HTMLParser:
       entities = json.load(f)
 
     buffer = ''
+    in_comment = False
     in_tag = False
     i = 0
     while i < len(self.body):
       c = self.body[i]
       if c == "<":
-        in_tag = True
-        if buffer:
-          self.add_text(buffer)
-        buffer = ""
+        if i + 4 < len(self.body) and self.body[i + 1:i + 4] == "!--":
+          in_comment = True
+        if not in_comment:
+          in_tag = True
+          if buffer:
+            self.add_text(buffer)
+          buffer = ""
       elif c == ">":
-        in_tag = False
-        self.add_element(buffer)
-        buffer = ''
-      elif not in_tag and c == "&":
+        if not in_comment:
+          in_tag = False
+          self.add_element(buffer)
+          buffer = ''
+        if self.body[i - 2:i] == "--":
+          in_comment = False
+          buffer = ''
+      elif not in_comment and not in_tag and c == "&":
         m = re.search(r"&.*?;", self.body[i:])
         if m:
           entity = m.group(0)
           if entity in entities:
             buffer += entities[entity]['characters']
           i += len(entity) - 1
-      else:
+      elif not in_comment:
         buffer += c
       i += 1
 

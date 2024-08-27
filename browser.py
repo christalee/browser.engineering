@@ -122,7 +122,7 @@ class Browser:
 
 
 if __name__ == "__main__":
-  TEST_FILE = 'file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.txt'
+  TEST_FILE = 'file://localhost/Users/christalee/Documents/software/projects/browser.engineering/example.html'
   parser = argparse.ArgumentParser()
   parser.add_argument("url", help="URL(s) to open", nargs="*", default=[TEST_FILE])
 
