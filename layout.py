@@ -1,7 +1,10 @@
 import tkinter as tk
-from typing import List, Union, Literal, Dict
+from typing import Union, Literal, Dict
 from tkinter import font as tkfont
+
 from parser import Element, Text
+from draw import DrawText, DrawRect, DrawEmoji
+import emoji
 
 HSTEP, VSTEP = 13, 18
 SCROLLBAR_WIDTH = 12
@@ -40,26 +43,129 @@ def get_measure(s, size, weight, style):
   return MEASURES[key]
 
 
-class Layout:
-  def __init__(self, tree, screen_width: int):
+def paint_tree(layout_object, display_list):
+  display_list.extend(layout_object.paint())
+
+  for child in layout_object.children:
+    paint_tree(child, display_list)
+
+
+class DocumentLayout:
+  def __init__(self, node, screen_width):
+    self.node = node
+    self.parent = None
+    self.previous = None
+    self.children = []
+
+    self.width = 0
+    self.height = 0
+    self.x = 0
+    self.y = 0
+    self.screen_width = screen_width
+
+  def layout(self):
+    child = BlockLayout(self.node, self, None)
+    self.children.append(child)
+    self.width = self.screen_width - (2 * HSTEP)
+    self.x = HSTEP
+    self.y = VSTEP
+    child.layout()
+    self.height = child.height
+
+  def paint(self):
+    return []
+
+
+class BlockLayout:
+  BLOCK_ELEMENTS = [
+    "html", "body", "article", "section", "nav", "aside", "h1", "h2", "h3", "h4", "h5", "h6", "hgroup", "header",
+    "footer", "address", "p", "hr", "pre", "blockquote", "ol", "ul", "menu", "li", "dl", "dt", "dd", "figure",
+    "figcaption", "main", "div", "table", "form", "fieldset", "legend", "details", "summary"
+  ]
+
+  def __init__(self, node, parent, previous):
+    self.node = node
+    self.parent = parent
+    self.previous = previous
+    self.children = []
+    self.display_list = []
+    self.line = []
+
+    self.x = None
+    self.y = None
+    self.width = None
+    self.height = None
+
     self.centering = False
     self.superscript = False
     self.pre = False
-    self.screen_width = screen_width
-    self.line = []
-    self.display_list = []
-    self.cursor_x = HSTEP
+
+    self.cursor_x: int = HSTEP
     self.cursor_y: int = VSTEP
     self.size: int = 16
     self.weight: Literal['normal', 'bold'] = "normal"
     self.style: Literal['roman', 'italic', 'roman fixed_width', "italic fixed_width"] = "roman"
-    # TODO figure out a more elegant way of identifying view-source mode
-    if isinstance(tree, list):
-      for tok in tree:
-        self.recurse(tok)
+
+  def __repr__(self):
+    return f"BlockLayout[{self.layout_mode()}](x={self.x}, y={self.y}, width={self.width}, height={self.height}, node={self.node})"
+
+  def layout_mode(self):
+    if isinstance(self.node, Text):
+      return "inline"
+    elif any([isinstance(child, Element) and child.tag in self.BLOCK_ELEMENTS for child in self.node.children]):
+      return "block"
+    elif self.node.children:
+      return "inline"
     else:
-      self.recurse(tree)
-    self.flush()
+      return "block"
+
+  def layout(self):
+    self.x = self.parent.x
+    if self.previous:
+      self.y = self.previous.y + self.previous.height
+    else:
+      self.y = self.parent.y
+    self.width = self.parent.width
+
+    mode = self.layout_mode()
+    if mode == "block":
+      previous = None
+      for child in self.node.children:
+        nxt = BlockLayout(child, self, previous)
+        self.children.append(nxt)
+        previous = nxt
+    else:
+      self.cursor_x = 0
+      self.cursor_y = 0
+      self.weight = "normal"
+      self.style = "roman"
+      self.size = 16
+
+      self.line = []
+      self.recurse(self.node)
+      self.flush()
+
+    for child in self.children:
+      child.layout()
+
+    if mode == "block":
+      self.height = sum([child.height for child in self.children])
+    else:
+      self.height = self.cursor_y
+
+  def paint(self):
+    cmds = []
+    if isinstance(self.node, Element) and self.node.tag == "pre":
+      x2 = self.x + self.width
+      y2 = self.y + self.height
+      cmds.append(DrawRect(self.x, self.y, x2, y2, "light gray"))
+    if self.layout_mode() == "inline":
+      for x, y, word, font in self.display_list:
+        if emoji.is_emoji(word):
+          cmds.append(DrawEmoji(x, y, word))
+        else:
+          cmds.append(DrawText(x, y, word, font))
+    return cmds
 
   def open_tag(self, element: Element):
     if element.tag == "i":
@@ -111,11 +217,7 @@ class Layout:
       self.pre = False
 
   def recurse(self, tree):
-    # This presents view-source with a fixed_width font
-    if isinstance(tree, str):
-      self.style += " fixed_width"
-      self.word(tree)
-    elif isinstance(tree, Text):
+    if isinstance(tree, Text):
       words = []
       if self.pre:
         word = ''
@@ -156,7 +258,7 @@ class Layout:
                           })
         # Because spaces are explicitly included in the wordlist during pre tags, don't include a space
         self.cursor_x += width
-    elif self.cursor_x + width + space < self.screen_width - SCROLLBAR_WIDTH:
+    elif self.cursor_x + width + space < self.width - SCROLLBAR_WIDTH:
       # If there's still room on this line, add to self.line and advance cursor_x
       self.line.append({"x": self.cursor_x,
                         "word": word,
@@ -176,7 +278,7 @@ class Layout:
         count = 0
         for part in parts:
           part_width = get_measure(part, self.size, self.weight, self.style)
-          if self.cursor_x + part_width + hyphen < self.screen_width - SCROLLBAR_WIDTH:
+          if self.cursor_x + part_width + hyphen < self.width - SCROLLBAR_WIDTH:
             # If it fits, add the part to the line
             self.line.append({"x": self.cursor_x,
                               "word": part,
@@ -238,7 +340,7 @@ class Layout:
       # Determine the line length, including the last word
       line_length = (last_entry["x"] - self.line[0]["x"]) + last_length
       # Calculate how much to shift each word's x to center
-      delta_x = (self.screen_width - line_length) / 2
+      delta_x = (self.width - line_length) / 2
     else:
       delta_x = 0
 
@@ -250,15 +352,16 @@ class Layout:
     for i, entry in enumerate(self.line):
       font = fonts[i]
       if entry["superscript"]:
-        y = baseline - max_ascent
+        y = self.y + baseline - max_ascent
       else:
-        y = baseline - font.metrics("ascent")
+        y = self.y + baseline - font.metrics("ascent")
       # delta_x is zero if not centering
-      self.display_list.append((entry['x'] + delta_x, y, entry['word'], font))
+      x = self.x + entry['x'] + delta_x
+      self.display_list.append((x, y, entry['word'], font))
 
     max_descent = max([metric['descent'] for metric in metrics])
     self.cursor_y = baseline + 1.25 * max_descent
-    self.cursor_x = HSTEP
+    self.cursor_x = 0
     if nextline:
       nextline["x"] = self.cursor_x
       self.line = [nextline]

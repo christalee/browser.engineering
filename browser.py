@@ -1,16 +1,12 @@
 import tkinter as tk
-import emoji
-from PIL import ImageTk, Image
 import argparse
 
 from url import URL
-from layout import Layout, VSTEP, SCROLLBAR_WIDTH
+from layout import paint_tree, DocumentLayout, VSTEP, SCROLLBAR_WIDTH
 from parser import HTMLParser
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
-
-emoji_dict = {}
 
 
 class Browser:
@@ -21,7 +17,7 @@ class Browser:
     self.display_list = []
     self.doc_height = 0
     self.scroll = 0
-    self.layout = None
+    self.document = None
 
     self.window = tk.Tk()
     self.canvas = tk.Canvas(
@@ -51,7 +47,7 @@ class Browser:
       self.scrollup(e)
 
   def scrolldown(self, e):
-    bottom_of_last_screen = self.doc_height + self.layout.size + VSTEP - self.screen_height
+    bottom_of_last_screen = self.doc_height + (2 * VSTEP) - self.screen_height
     self.scroll = min(bottom_of_last_screen, self.scroll + SCROLL_STEP)
     self.draw()
 
@@ -59,35 +55,29 @@ class Browser:
     self.scroll = max(0, self.scroll - SCROLL_STEP)
     self.draw()
 
+  def redraw(self):
+    self.document = DocumentLayout(self.tokens, self.screen_width)
+    self.document.layout()
+    self.display_list = []
+    paint_tree(self.document, self.display_list)
+    if self.display_list:
+      self.doc_height = self.display_list[-1].top
+    self.draw()
+
   def resize(self, e):
     self.screen_width, self.screen_height = e.width, e.height
-    self.layout = Layout(self.tokens, self.screen_width)
-    self.display_list = self.layout.display_list
-    if self.display_list:
-      self.doc_height = self.display_list[-1][1]
-    self.draw()
+    self.redraw()
 
   def draw(self):
     self.canvas.delete('all')
-    for x, y, c, f in self.display_list:
+    for cmd in self.display_list:
       # omit characters above the viewport
-      if y + VSTEP < self.scroll:
+      if cmd.bottom < self.scroll:
         continue
       # omit characters below the viewport
-      if y > self.scroll + self.screen_height:
+      if cmd.top > self.scroll + self.screen_height:
         continue
-      if emoji.is_emoji(c):
-        codepoints = []
-        for char in c:
-          # This format string is magic; TODO find an explainer
-          codepoints.append('{:04x}'.format(ord(char)).upper())
-        emoji_png = '-'.join(codepoints)
-        if emoji_png not in emoji_dict:
-          image = Image.open(f'openmoji-72x72-color/{emoji_png}.png')
-          emoji_dict[emoji_png] = ImageTk.PhotoImage(image.resize((16, 16)))
-        self.canvas.create_image(x, y - self.scroll, anchor="nw", image=emoji_dict[emoji_png])
-      else:
-        self.canvas.create_text(x, y - self.scroll, text=c, anchor="nw", font=f)
+      cmd.execute(self.scroll, self.canvas)
 
     if self.doc_height > self.screen_height:
       self.draw_scrollbar()
@@ -108,17 +98,15 @@ class Browser:
     body = url.request(num_redirects)
     if body:
       if url.view_source:
-        self.tokens = body.split()
+        parser = HTMLParser('')
+        parser.add_element("pre")
+        for word in body.split(' '):
+          parser.add_text(word + " ")
+        self.tokens = parser.finish()
       else:
         self.tokens = HTMLParser(body).parse()
-    else:
-      self.tokens = []
 
-    self.layout = Layout(self.tokens, self.screen_width)
-    self.display_list = self.layout.display_list
-    if self.display_list:
-      self.doc_height = self.display_list[-1][1]
-    self.draw()
+    self.redraw()
 
 
 if __name__ == "__main__":
