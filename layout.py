@@ -241,6 +241,17 @@ class BlockLayout:
         self.recurse(child)
       self.close_tag(tree)
 
+  def create_word(self, word, x=None, size=None, weight=None, style=None, centering=None, superscript=None):
+    return {
+      "x": x if x else self.cursor_x,
+      "word": word,
+      "size": size if size else self.size,
+      "weight": weight if weight else self.weight,
+      "style": style if style else self.style,
+      "centering": centering if centering else self.centering,
+      "superscript": superscript if superscript else self.superscript
+    }
+
   def word(self, word):
     space = get_measure(" ", self.size, self.weight, self.style)
     width = get_measure(word, self.size, self.weight, self.style)
@@ -248,26 +259,12 @@ class BlockLayout:
       if word == '\n':
         self.flush()
       else:
-        self.line.append({"x": self.cursor_x,
-                          "word": word,
-                          "size": self.size,
-                          "weight": self.weight,
-                          "style": self.style,
-                          "centering": self.centering,
-                          "superscript": self.superscript
-                          })
+        self.line.append(self.create_word(word))
         # Because spaces are explicitly included in the wordlist during pre tags, don't include a space
         self.cursor_x += width
     elif self.cursor_x + width + space < self.width - SCROLLBAR_WIDTH:
       # If there's still room on this line, add to self.line and advance cursor_x
-      self.line.append({"x": self.cursor_x,
-                        "word": word,
-                        "size": self.size,
-                        "weight": self.weight,
-                        "style": self.style,
-                        "centering": self.centering,
-                        "superscript": self.superscript
-                        })
+      self.line.append(self.create_word(word))
       self.cursor_x += width + space
     else:
       # If soft hyphens are present in the word, consider splitting on them
@@ -280,14 +277,7 @@ class BlockLayout:
           part_width = get_measure(part, self.size, self.weight, self.style)
           if self.cursor_x + part_width + hyphen < self.width - SCROLLBAR_WIDTH:
             # If it fits, add the part to the line
-            self.line.append({"x": self.cursor_x,
-                              "word": part,
-                              "size": self.size,
-                              "weight": self.weight,
-                              "style": self.style,
-                              "centering": self.centering,
-                              "superscript": self.superscript
-                              })
+            self.line.append(self.create_word(part))
             self.cursor_x += part_width
             taken.append(part)
             count += 1
@@ -298,34 +288,14 @@ class BlockLayout:
         leftovers = ''.join([p for p in parts if p not in taken])
         if count > 0:
           # Don't add a hyphen unless some parts are added to the line
-          self.line.append({
-            "x": self.cursor_x,
-            "word": "-",
-            "size": self.size,
-            "weight": self.weight,
-            "style": self.style,
-            "centering": self.centering,
-            "superscript": self.superscript
-          })
-        nextline = {
-          "word": leftovers,
-          "size": self.size,
-          "weight": self.weight,
-          "style": self.style,
-          "centering": self.centering,
-          "superscript": self.superscript
-        }
+          self.line.append(self.create_word("-"))
+        # Set x explicitly to something terrible so we notice if x isn't updated before usage
+        nextline = self.create_word(leftovers, x=-1)
         self.flush(nextline)
       else:
         # If there's no more room on this line, finish it with current word starting the next line
-        nextline = {
-          "word": word,
-          "size": self.size,
-          "weight": self.weight,
-          "style": self.style,
-          "centering": self.centering,
-          "superscript": self.superscript
-        }
+        # Set x explicitly to something terrible so we notice if x isn't updated before usage
+        nextline = self.create_word(word, x=-1)
         self.flush(nextline)
 
   def flush(self, nextline: Dict[str, Union[int, str, bool]] = None):
@@ -363,6 +333,7 @@ class BlockLayout:
     self.cursor_y = baseline + 1.25 * max_descent
     self.cursor_x = 0
     if nextline:
+      # Here we update nextline's x field
       nextline["x"] = self.cursor_x
       self.line = [nextline]
       self.cursor_x += get_measure(nextline["word"] + " ",
