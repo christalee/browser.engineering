@@ -162,6 +162,12 @@ class BlockLayout:
       x2 = self.x + self.width
       y2 = self.y + self.height
       cmds.append(DrawRect(self.x, self.y, x2, y2, "light gray"))
+    if isinstance(self.node, Element) and self.node.tag == "li" and \
+      isinstance(self.node.parent, Element) and self.node.parent.tag == "ul":
+      x2 = self.x + 4
+      y1 = self.y + (self.height / 2) - 2
+      y2 = y1 + 4
+      cmds.append(DrawRect(self.x, y1, x2, y2, "black"))
     if self.layout_mode() == "inline":
       for x, y, word, font in self.display_list:
         if emoji.is_emoji(word):
@@ -330,6 +336,8 @@ class BlockLayout:
         y = self.y + baseline - font.metrics("ascent")
       # delta_x is zero if not centering
       x = self.x + entry['x'] + delta_x
+      if isinstance(self.node, Element) and self.node.tag == "li":
+        x += HSTEP
       self.display_list.append((x, y, entry['word'], font))
 
     max_descent = max([metric['descent'] for metric in metrics])
