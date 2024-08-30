@@ -131,6 +131,8 @@ class BlockLayout:
     if mode == "block":
       previous = None
       for child in self.node.children:
+        if isinstance(child, Element) and child.tag == "head":
+          continue
         nxt = BlockLayout(child, self, previous)
         self.children.append(nxt)
         previous = nxt
@@ -155,7 +157,8 @@ class BlockLayout:
 
   def paint(self):
     cmds = []
-    if isinstance(self.node, Element) and self.node.tag == "pre":
+    if isinstance(self.node, Element) and (
+      self.node.tag == "pre" or (self.node.tag == "nav" and "links" in self.node.attributes.get('class', ''))):
       x2 = self.x + self.width
       y2 = self.y + self.height
       cmds.append(DrawRect(self.x, self.y, x2, y2, "light gray"))

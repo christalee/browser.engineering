@@ -15,7 +15,6 @@ class Browser:
     self.screen_height = HEIGHT
     self.tokens = []
     self.display_list = []
-    self.doc_height = 0
     self.scroll = 0
     self.document = None
 
@@ -47,7 +46,7 @@ class Browser:
       self.scrollup(e)
 
   def scrolldown(self, e):
-    bottom_of_last_screen = self.doc_height + (2 * VSTEP) - self.screen_height
+    bottom_of_last_screen = max(self.document.height + (2 * VSTEP) - self.screen_height, 0)
     self.scroll = min(bottom_of_last_screen, self.scroll + SCROLL_STEP)
     self.draw()
 
@@ -60,8 +59,6 @@ class Browser:
     self.document.layout()
     self.display_list = []
     paint_tree(self.document, self.display_list)
-    if self.display_list:
-      self.doc_height = self.display_list[-1].top
     self.draw()
 
   def resize(self, e):
@@ -79,12 +76,12 @@ class Browser:
         continue
       cmd.execute(self.scroll, self.canvas)
 
-    if self.doc_height > self.screen_height:
+    if self.document.height > self.screen_height:
       self.draw_scrollbar()
 
   def draw_scrollbar(self):
-    percent_shown = self.screen_height / self.doc_height
-    percent_offset = self.scroll / self.doc_height
+    percent_shown = self.screen_height / self.document.height
+    percent_offset = self.scroll / self.document.height
     y_total = percent_shown * self.screen_height
 
     x0 = self.screen_width - SCROLLBAR_WIDTH
