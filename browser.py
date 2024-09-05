@@ -1,6 +1,7 @@
 import tkinter as tk
 import argparse
 
+from css import style
 from url import URL
 from layout import paint_tree, DocumentLayout, VSTEP, SCROLLBAR_WIDTH
 from parser import HTMLParser
@@ -102,7 +103,7 @@ class Browser:
         self.tokens = parser.finish()
       else:
         self.tokens = HTMLParser(body).parse()
-
+    style(self.tokens)
     self.redraw()
 
 
