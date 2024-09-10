@@ -160,3 +160,18 @@ class URL:
       return self.path
     if self.scheme == 'http' or 'https':
       return self.handle_http(num_redirects)
+
+  def resolve(self, url):
+    if "://" in url:
+      return URL(url)
+    if not url.startswith("/"):
+      dir, _ = self.path.rsplit("/", 1)
+      while url.startswith("../"):
+        _, url = url.split("/", 1)
+        if "/" in dir:
+          dir, _ = dir.rsplit("/", 1)
+      url = f"{dir}/{url}"
+    if url.startswith("//"):
+      return URL(f"{self.scheme}:{url}")
+    else:
+      return URL(f"{self.scheme}://{self.host}:{str(self.port)}{url}")

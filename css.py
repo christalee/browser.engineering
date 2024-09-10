@@ -1,20 +1,108 @@
 from parser import Element
 
+INHERITED_PROPERTIES = {
+  "font-size": "16px",
+  "font-style": "normal",
+  "font-weight": "normal",
+  "color": "black",
+}
 
-def style(node):
+
+def style(node, rules):
   node.style = {}
+  for prop, default in INHERITED_PROPERTIES.items():
+    if node.parent:
+      node.style[prop] = node.parent.style[prop]
+    else:
+      node.style[prop] = default
+  for selector, body in rules:
+    if not selector.matches(node):
+      continue
+    for prop, value in body.items():
+      node.style[prop] = value
   if isinstance(node, Element) and "style" in node.attributes:
     pairs = CSSParser(node.attributes['style']).body()
     for prop, value in pairs.items():
       node.style[prop] = value
+
+  if node.style['font-size'].endswith("%"):
+    if node.parent:
+      parent_font_size = node.parent.style["font-size"]
+    else:
+      parent_font_size = INHERITED_PROPERTIES['font-size']
+    node_pct = float(node.style["font-size"][:-1]) / 100
+    parent_px = float(parent_font_size[:-2])
+    node.style["font-size"] = f"{str(node_pct * parent_px)}px"
+
   for child in node.children:
-    style(child)
+    style(child, rules)
+
+
+def cascade_priority(rule):
+  selector, body = rule
+  return selector.priority
+
+
+class TagSelector:
+  def __init__(self, tag):
+    self.tag = tag
+    self.priority = 1
+
+  def matches(self, node):
+    return isinstance(node, Element) and self.tag == node.tag
+
+
+class DescendantSelector:
+  def __init__(self, ancestor, descendant):
+    self.ancestor = ancestor
+    self.descendant = descendant
+    self.priority = ancestor.priority + descendant.priority
+
+  def matches(self, node):
+    if not self.descendant.matches(node):
+      return False
+    while node.parent:
+      if self.ancestor.matches(node.parent):
+        return True
+      node = node.parent
+    return False
 
 
 class CSSParser:
   def __init__(self, s):
     self.s = s
     self.i = 0
+
+  def selector(self):
+    out = TagSelector(self.word().casefold())
+    self.whitespace()
+    while self.i < len(self.s) and self.s[self.i] != "{":
+      tag = self.word()
+      descendant = TagSelector(tag.casefold())
+      out = DescendantSelector(out, descendant)
+      self.whitespace()
+    return out
+
+  def parse(self):
+    rules = []
+    while self.i < len(self.s):
+      try:
+        self.whitespace()
+        selector = self.selector()
+        self.literal("{")
+        self.whitespace()
+        body = self.body()
+        self.literal("}")
+        rules.append((selector, body))
+      except Exception as e:
+        print(e)
+        why = self.ignore_until(["}"])
+        if why == "}":
+          self.literal("}")
+          self.whitespace()
+        else:
+          break
+    return rules
 
   def whitespace(self):
     while self.i < len(self.s) and self.s[self.i].isspace():
@@ -64,7 +152,7 @@ class CSSParser:
         self.whitespace()
       except Exception as e:
         print(e)
-        why = self.ignore_until([';'])
+        why = self.ignore_until([';', "}"])
         if why == ';':
           self.literal(';')
           self.whitespace()

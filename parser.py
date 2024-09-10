@@ -25,6 +25,7 @@ class Element:
     self.attributes = attributes
     self.children = []
     self.parent = parent
+    self.style = {}
 
   def __repr__(self):
     return f"<{self.tag} {self.attributes}>"

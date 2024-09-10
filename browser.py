@@ -1,20 +1,28 @@
 import tkinter as tk
 import argparse
 
-from css import style
+from css import style, CSSParser, cascade_priority
 from url import URL
 from layout import paint_tree, DocumentLayout, VSTEP, SCROLLBAR_WIDTH
-from parser import HTMLParser
+from parser import HTMLParser, Element
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100
+DEFAULT_STYLE_SHEET = CSSParser(open("browser.css").read()).parse()
+
+
+def tree_to_list(tree, lst):
+  lst.append(tree)
+  for child in tree.children:
+    tree_to_list(child, lst)
+  return lst
 
 
 class Browser:
   def __init__(self):
     self.screen_width = WIDTH
     self.screen_height = HEIGHT
-    self.tokens = []
+    self.nodes = []
     self.display_list = []
     self.scroll = 0
     self.document = None
@@ -56,7 +64,7 @@ class Browser:
     self.draw()
 
   def redraw(self):
-    self.document = DocumentLayout(self.tokens, self.screen_width)
+    self.document = DocumentLayout(self.nodes, self.screen_width)
     self.document.layout()
     self.display_list = []
     paint_tree(self.document, self.display_list)
@@ -100,10 +108,22 @@ class Browser:
         parser.add_element("pre")
         for word in body.split(' '):
           parser.add_text(word + " ")
-        self.tokens = parser.finish()
+        self.nodes = parser.finish()
       else:
-        self.tokens = HTMLParser(body).parse()
-    style(self.tokens)
+        self.nodes = HTMLParser(body).parse()
+
+    rules = DEFAULT_STYLE_SHEET.copy()
+    links = [node.attributes['href'] for node in tree_to_list(self.nodes, []) if isinstance(node, Element) \
+             and node.tag == "link" and node.attributes.get("rel") == "stylesheet" and "href" in node.attributes]
+    for link in links:
+      style_url = url.resolve(link)
+      try:
+        body = style_url.request()
+      except Exception as e:
+        print(e)
+        continue
+      rules.extend(CSSParser(body).parse())
+    style(self.nodes, sorted(rules, key=cascade_priority))
     self.redraw()
 
 
