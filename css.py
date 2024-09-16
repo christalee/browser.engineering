@@ -1,4 +1,4 @@
-from parser import Element
+from html_parser import Element
 
 INHERITED_PROPERTIES = {
   "font-size": "16px",

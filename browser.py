@@ -4,7 +4,7 @@ import argparse
 from css import style, CSSParser, cascade_priority
 from url import URL
 from layout import paint_tree, DocumentLayout, VSTEP, SCROLLBAR_WIDTH
-from parser import HTMLParser, Element
+from html_parser import HTMLParser, Element
 
 WIDTH, HEIGHT = 800, 600
 SCROLL_STEP = 100

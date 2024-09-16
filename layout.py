@@ -3,7 +3,7 @@ from typing import Union, Literal, Dict
 from tkinter import font as tkfont
 
 from css import INHERITED_PROPERTIES
-from parser import Element, Text
+from html_parser import Element, Text
 from draw import DrawText, DrawRect, DrawEmoji
 import emoji
 
