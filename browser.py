@@ -31,7 +31,8 @@ class Browser:
     self.canvas = tk.Canvas(
       self.window,
       width=self.screen_width,
-      height=self.screen_height
+      height=self.screen_height,
+      bg="white"
     )
     self.canvas.pack(fill=tk.BOTH, expand=True)
 

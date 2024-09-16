@@ -103,9 +103,6 @@ class BlockLayout:
 
     self.cursor_x: int = HSTEP
     self.cursor_y: int = VSTEP
-    # self.size: int = 16
-    # self.weight: Literal['normal', 'bold'] = "normal"
-    # self.style: Literal['roman', 'italic', 'roman fixed_width', "italic fixed_width"] = "roman"
 
   def __repr__(self):
     return f"BlockLayout[{self.layout_mode()}](x={self.x}, y={self.y}, width={self.width}, height={self.height}, node={self.node})"
@@ -140,9 +137,6 @@ class BlockLayout:
     else:
       self.cursor_x = 0
       self.cursor_y = 0
-      # self.weight = "normal"
-      # self.style = "roman"
-      # self.size = 16
 
       self.line = []
       self.recurse(self.node)
@@ -175,60 +169,32 @@ class BlockLayout:
       y2 = y1 + 4
       cmds.append(DrawRect(self.x, y1, x2, y2, "black"))
     if self.layout_mode() == "inline":
-      for x, y, word, font in self.display_list:
+      for x, y, word, font, color in self.display_list:
         if emoji.is_emoji(word):
           cmds.append(DrawEmoji(x, y, word))
         else:
-          cmds.append(DrawText(x, y, word, font))
+          cmds.append(DrawText(x, y, word, font, color))
     return cmds
 
   def open_tag(self, element: Element):
-    # if element.tag == "i":
-    #   if "fixed_width" in self.style:
-    #     self.style = "italic fixed_width"
-    #   else:
-    #     self.style = "italic"
-    # elif element.tag == "b":
-    #   self.weight = "bold"
-    # elif element.tag == "small":
-    #   self.size -= 2
-    # elif element.tag == "big":
-    #   self.size += 4
     if element.tag == "br":
       self.flush()
     elif element.tag == 'h1':
-      # self.size = int(self.size * 1.5)
       if "title" in element.attributes.get('class', ''):
         self.centering = True
     elif element.tag == "sup":
-      # self.size = int(self.size / 2)
       self.superscript = True
     elif element.tag == "pre":
-      # self.style += " fixed_width"
       self.pre = True
 
   def close_tag(self, element: Element):
-    # if element.tag == "i":
-    #   if "fixed_width" in self.style:
-    #     self.style = "roman fixed_width"
-    #   else:
-    #     self.style = "roman"
-    # elif element.tag == "b":
-    #   self.weight = "normal"
-    # elif element.tag == "small":
-    #   self.size += 2
-    # elif element.tag == "big":
-    #   self.size -= 4
     if element.tag == "p":
       self.flush()
     elif element.tag == "h1":
-      # self.size = int(self.size / 1.5)
       self.centering = False
     elif element.tag == "sup":
-      # self.size = int(self.size * 2)
       self.superscript = False
     elif element.tag == "pre":
-      # self.style = self.style.replace("fixed_width", "").strip()
       self.pre = False
 
   def recurse(self, tree):
@@ -256,13 +222,14 @@ class BlockLayout:
         self.recurse(child)
       self.close_tag(tree)
 
-  def create_word(self, word, x=None, size=None, weight=None, style=None, centering=None, superscript=None):
+  def create_word(self, word, x=None, size=None, weight=None, style=None, centering=None, superscript=None, color=None):
     return {
       "x": x if x else self.cursor_x,
       "word": word,
       "size": size if size else 16,
       "weight": weight if weight else "normal",
       "style": style if style else "roman",
+      "color": color if color else "black",
       "centering": centering if centering else self.centering,
       "superscript": superscript if superscript else self.superscript
     }
@@ -275,18 +242,20 @@ class BlockLayout:
     if self.pre:
       style += " fixed_width"
     size = int(float(node.style['font-size'][:-2]) * .75)
+    color = node.style['color']
+
     space = get_measure(" ", size, weight, style)
     width = get_measure(word, size, weight, style)
     if self.pre:
       if word == '\n':
         self.flush()
       else:
-        self.line.append(self.create_word(word, size=size, weight=weight, style=style))
+        self.line.append(self.create_word(word, size=size, weight=weight, style=style, color=color))
         # Because spaces are explicitly included in the wordlist during pre tags, don't include a space
         self.cursor_x += width
     elif self.cursor_x + width + space < self.width - SCROLLBAR_WIDTH:
       # If there's still room on this line, add to self.line and advance cursor_x
-      self.line.append(self.create_word(word, size=size, weight=weight, style=style))
+      self.line.append(self.create_word(word, size=size, weight=weight, style=style, color=color))
       self.cursor_x += width + space
     else:
       # If soft hyphens are present in the word, consider splitting on them
@@ -299,7 +268,7 @@ class BlockLayout:
           part_width = get_measure(part, size, weight, style)
           if self.cursor_x + part_width + hyphen < self.width - SCROLLBAR_WIDTH:
             # If it fits, add the part to the line
-            self.line.append(self.create_word(part, size=size, weight=weight, style=style))
+            self.line.append(self.create_word(part, size=size, weight=weight, style=style, color=color))
             self.cursor_x += part_width
             taken.append(part)
             count += 1
@@ -310,14 +279,14 @@ class BlockLayout:
         leftovers = ''.join([p for p in parts if p not in taken])
         if count > 0:
           # Don't add a hyphen unless some parts are added to the line
-          self.line.append(self.create_word("-", size=size, weight=weight, style=style))
+          self.line.append(self.create_word("-", size=size, weight=weight, style=style, color=color))
         # Set x explicitly to something terrible so we notice if x isn't updated before usage
-        nextline = self.create_word(leftovers, x=-1, size=size, weight=weight, style=style)
+        nextline = self.create_word(leftovers, x=-1, size=size, weight=weight, style=style, color=color)
         self.flush(nextline)
       else:
         # If there's no more room on this line, finish it with current word starting the next line
         # Set x explicitly to something terrible so we notice if x isn't updated before usage
-        nextline = self.create_word(word, x=-1, size=size, weight=weight, style=style)
+        nextline = self.create_word(word, x=-1, size=size, weight=weight, style=style, color=color)
         self.flush(nextline)
 
   def flush(self, nextline: Dict[str, Union[int, str, bool]] = None):
@@ -351,7 +320,7 @@ class BlockLayout:
       x = self.x + entry['x'] + delta_x
       if isinstance(self.node, Element) and self.node.tag == "li":
         x += HSTEP
-      self.display_list.append((x, y, entry['word'], font))
+      self.display_list.append((x, y, entry['word'], font, entry['color']))
 
     max_descent = max([metric['descent'] for metric in metrics])
     self.cursor_y = baseline + 1.25 * max_descent
